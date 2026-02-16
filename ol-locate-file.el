@@ -1,9 +1,9 @@
-;;; ol-local-file.el --- Org-mode link type for local file names -*- lexical-binding: t -*-
+;;; ol-locate-file.el --- Org-mode link type for files by their names instead of paths -*- lexical-binding: t -*-
 
 ;; Author: p-snow
 ;; Version: 0.0.1
 ;; Package-Requires: ((emacs "27.1") (org "9.3"))
-;; Homepage: https://github.com/p-snow/ol-local-file
+;; Homepage: https://github.com/p-snow/ol-locate-file
 ;; Keywords: hypermedia, files, matching
 
 ;; This file is not part of GNU Emacs
@@ -23,7 +23,7 @@
 
 ;;; Commentary:
 
-;; Org-mode link type for local file names
+;; Org-mode link type for files by their names instead of paths
 
 ;;; Code:
 
@@ -31,9 +31,9 @@
 (require 'org-element)
 
 (org-link-set-parameters "lfile"
-                         :store #'ol-local-file-store-link)
+                         :store #'ol-locate-file-store-link)
 
-(defvar ol-local-file-link-re
+(defvar ol-locate-file-link-re
   (rx "["
       "[lfile" (opt (or "+emacs" "+sys")) ":"
       (group (minimal-match (1+ print))) "]"
@@ -41,26 +41,26 @@
       "]")
   "Regular expression matching lfile any link.")
 
-(defvar ol-local-file-locate-db nil)
+(defvar ol-locate-file-locate-db nil)
 
 (mapc (apply-partially 'add-to-list 'org-link-abbrev-alist)
-      '(("lfile" . "file:%(ol-local-file-locate)")
-        ("lfile+emacs" . "file+emacs:%(ol-local-file-locate)")
-        ("lfile+sys" . "file+sys:%(ol-local-file-locate)")))
+      '(("lfile" . "file:%(ol-locate-file-locate)")
+        ("lfile+emacs" . "file+emacs:%(ol-locate-file-locate)")
+        ("lfile+sys" . "file+sys:%(ol-locate-file-locate)")))
 
-(defun ol-local-file-locate (tag)
+(defun ol-locate-file-locate (tag)
   "Return a path found using TAG with locate program."
   (let* ((match-idx (string-match "^\\([^:]*\\)\\(::?\\(.*\\)\\)?$" tag))
          (link (if match-idx (match-string 1 tag) tag)))
     (concat (string-trim
              (shell-command-to-string
               (concat (format "plocate -d %s -e \"%s\" 2>/dev/null"
-                              ol-local-file-locate-db
+                              ol-locate-file-locate-db
                               (shell-quote-argument link))
                       " | head --lines=1")))
             (when match-idx (match-string 2 tag)))))
 
-(defun ol-local-file-store-link ()
+(defun ol-locate-file-store-link ()
   "Store a lfile link.
 
 Prefix argument does matter in this function call.
@@ -79,7 +79,7 @@ If `C-u' prefix is given, file: link type will be used instead."
          :type "lfile"
          :link (concat "lfile:" (file-name-nondirectory path)))))))
 
-(defun ol-local-file-abbrev (raw-link &optional path-conv-fn)
+(defun ol-locate-file-abbrev (raw-link &optional path-conv-fn)
   "Return an abbreviated lfile link from RAW-LINK.
 
 RAW-LINK is supposed to be a file link type with a path and the path is
@@ -102,6 +102,6 @@ converted by `file-name-nondirectory' unless PATH-CONV-FN is supplied."
            raw-link)
           (t nil))))
 
-(provide 'ol-local-file)
+(provide 'ol-locate-file)
 
-;;; ol-local-file.el ends here
+;;; ol-locate-file.el ends here

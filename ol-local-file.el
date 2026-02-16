@@ -29,7 +29,9 @@
 
 (require 'ol)
 (require 'org-element)
-(require 'dired)
+
+(org-link-set-parameters "lfile"
+                         :store #'ol-local-file-store-link)
 
 (defvar ol-local-file-link-re
   (rx "["
@@ -99,9 +101,6 @@ converted by `file-name-nondirectory' unless PATH-CONV-FN is supplied."
           ((stringp type)
            raw-link)
           (t nil))))
-
-(org-link-set-parameters "lfile"
-                         :store #'ol-local-file-store-link)
 
 (provide 'ol-local-file)
 

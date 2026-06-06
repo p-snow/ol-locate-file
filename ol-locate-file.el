@@ -26,8 +26,7 @@
 ;;; Commentary:
 
 ;; This package provides a new Org link type that resolves partial
-;; file path substrings into full paths using the `locate' command
-;; (or its compatible implementations such as mlocate or plocate).
+;; file path substrings into full paths using the `locate' command.
 ;;
 ;; With this package, instead of writing a full absolute path:
 ;;
@@ -52,6 +51,10 @@
 ;; When multiple files match the search substring, the user is
 ;; prompted with `completing-read' to select the intended target.
 ;;
+;; The locate command is invoked via Emacs' built-in `locate-make-command-line',
+;; so any customizations to that variable (or to `locate-command',
+;; `locate-prompt-for-command', etc.) are automatically honored.
+;;
 ;; Security: the package runs the locate command through `call-process'
 ;; rather than a shell, avoiding shell injection risks.
 
@@ -60,6 +63,7 @@
 (require 'ol)
 (require 'org)
 (require 'cl-lib)
+(require 'locate)
 
 ;;; Customization group
 
@@ -80,43 +84,6 @@ retroactively update existing links."
   :type 'string
   :group 'ol-locate-file)
 
-(defcustom ol-locate-file-command
-  (if (and (boundp 'locate-command)
-           (stringp locate-command))
-      locate-command
-    "locate")
-  "Executable program used to search the file database.
-Defaults to the value of `locate-command' from Emacs' built-in
-`locate.el' package if available; otherwise defaults to \"locate\"."
-  :type 'string
-  :group 'ol-locate-file)
-
-(defcustom ol-locate-file-arguments
-  '("-i")
-  "List of command-line arguments passed to the locate command.
-These are inserted before the search term.  The default (\"-i\")
-enables case-insensitive matching, which is supported by both
-mlocate and plocate.  Set to nil for case-sensitive matching."
-  :type '(repeat string)
-  :group 'ol-locate-file)
-
-(defcustom ol-locate-file-database
-  (if (and (boundp 'locate-db)
-           (stringp locate-db))
-      locate-db
-    nil)
-  "Path to the locate database file.
-When non-nil, the locate command is invoked with the appropriate
-flag to use this specific database.  Defaults to the value of
-`locate-db' from Emacs' built-in `locate.el' if available;
-otherwise nil (which means the default system database is used).
-
-If you use plocate, the flag \"--database\" is automatically
-used; for mlocate and other implementations, \"-d\" is used."
-  :type '(choice (const :tag "Default database" nil)
-                 (file :tag "Database file"))
-  :group 'ol-locate-file)
-
 (defcustom ol-locate-file-max-results 500
   "Maximum number of locate results to collect.
 Limiting results prevents performance issues when the search
@@ -129,45 +96,24 @@ substring is very short and matches many files."
 (defvar ol-locate-file--history nil
   "History list for `ol-locate-file' minibuffer completions.")
 
-;;; plocate detection
-
-(defun ol-locate-file--plocate-p ()
-  "Return non-nil if the configured locate command is plocate.
-Detects plocate by inspecting the command name.  Also returns
-non-nil if the locate command is not found but plocate is
-available as a fallback."
-  (let ((cmd-name (file-name-nondirectory ol-locate-file-command)))
-    (or (string-match-p "plocate" cmd-name)
-        (and (not (executable-find ol-locate-file-command))
-             (executable-find "plocate")))))
-
-;;; Database argument construction
-
-(defun ol-locate-file--database-args ()
-  "Return a list of arguments specifying the locate database.
-When `ol-locate-file-database' is nil, returns an empty list."
-  (when ol-locate-file-database
-    (if (ol-locate-file--plocate-p)
-        (list "--database" ol-locate-file-database)
-      (list "-d" ol-locate-file-database))))
-
 ;;; Command construction
 
 (defun ol-locate-file--build-command (search-string)
   "Build the locate command line for SEARCH-STRING.
-Returns a list of (command . args) suitable for `call-process'.
-Signals `user-error' if the locate command cannot be found."
-  (let ((cmd (executable-find ol-locate-file-command)))
-    (unless cmd
-      (if (ol-locate-file--plocate-p)
-          (setq cmd (executable-find "plocate"))
-        (user-error "Cannot find locate command: %s" ol-locate-file-command)))
-    (unless cmd
-      (user-error "Cannot find locate command: %s" ol-locate-file-command))
-    (append (list cmd)
-            ol-locate-file-arguments
-            (ol-locate-file--database-args)
-            (list search-string))))
+Returns a list of (COMMAND . ARGS) suitable for `call-process',
+where COMMAND is the absolute path to the locate executable.
+Signals `user-error' if the locate command cannot be found.
+
+Delegates to `locate-make-command-line' from Emacs' built-in
+`locate.el', which users can customize directly to control the
+locate command and its arguments."
+  (let* ((cmdline (funcall locate-make-command-line search-string))
+         (cmd (car cmdline))
+         (proc (executable-find cmd))
+         (args (delq nil (cdr cmdline))))
+    (unless proc
+      (user-error "Cannot find locate command: %s" cmd))
+    (cons proc args)))
 
 ;;; Locate execution
 
@@ -185,7 +131,7 @@ injection risks.  No shell metacharacters are interpreted."
          (args (cdr cmd-args))
          (max-results ol-locate-file-max-results))
     (with-temp-buffer
-      (let ((exit-code (apply #'call-process cmd nil
+      (let ((_exit-code (apply #'call-process cmd nil
                               (list (current-buffer) nil) nil args)))
         ;; Note: `locate' may exit non-zero when there are no matches;
         ;; we treat an empty output buffer as "no matches" regardless
@@ -246,8 +192,8 @@ before \"::\" is used as the locate search term; any search
 option is preserved in the output.
 
 When multiple files match, the first result is returned silently
-(this function is designed for non-interactive use during link
-abbreviation expansion).  Use `ol-locate-file--resolve' for
+  (this function is designed for non-interactive use during link
+  abbreviation expansion).  Use `ol-locate-file--resolve' for
 interactive prompting.
 
 This function is intended for use in `org-link-abbrev-alist'
@@ -432,18 +378,15 @@ distinguish locate-based links from regular file links."
 ;;; Link type registration
 
 (defun ol-locate-file--register-abbrevs ()
-  "Register link abbreviations for lfile variants in `org-link-abbrev-alist'.
+  "Register link abbreviations for display purposes.
 
-The abbreviations cause Org to display and parse the links as
-their `file:' equivalents, with the locate resolution happening
-transparently.
+Registers lfile:, lfile+emacs, and lfile+sys abbreviations in
+`org-link-abbrev-alist'.  Abbreviations expand links to file:
+equivalents at parse time, using the first locate match (non-
+interactive).
 
-Registered abbreviations:
-  TYPE         → file:%(ol-locate-file-locate)
-  TYPE+emacs   → file+emacs:%(ol-locate-file-locate)
-  TYPE+sys     → file+sys:%(ol-locate-file-locate)
-
-where TYPE is the value of `ol-locate-file-link-type'."
+See also `ol-locate-file--register-link-parameters', which defines
+link behavior (follow, export, store, complete)."
   (let ((type ol-locate-file-link-type))
     (cl-pushnew (cons type
                       (concat "file:%(ol-locate-file-locate)"))
@@ -458,11 +401,19 @@ where TYPE is the value of `ol-locate-file-link-type'."
                 org-link-abbrev-alist
                 :test #'equal)))
 
-(defun ol-locate-file--register-link ()
-  "Register the lfile: link type and its variants with Org.
+(defun ol-locate-file--register-link-parameters ()
+  "Register link behavior via `org-link-set-parameters'.
 
-Sets :follow, :store, :export, :complete, :face, :help-echo,
-and :keymap parameters for all three link type variants."
+Registers :follow, :store, :export, :complete, :face, :help-echo,
+and :keymap for the link type and its +emacs/+sys variants.
+
+This defines what happens when a link is clicked, exported, or
+stored.  Display and parsing are handled separately by
+`ol-locate-file--register-abbrevs', which expands lfile: links to
+file: links at parse time using the first locate match.
+
+The dual registration (abbrevs + parameters) is required: abbrevs
+control display, while parameters control behavior."
   ;; Register the main link type
   (org-link-set-parameters
    ol-locate-file-link-type
@@ -498,15 +449,22 @@ and :keymap parameters for all three link type variants."
 (defun ol-locate-file-setup ()
   "Set up the ol-locate-file link type.
 
-Registers link type parameters via `org-link-set-parameters' and
-link abbreviations via `org-link-abbrev-alist'.  Call this in
-your init file after this package is loaded:
+This function performs two registrations required for correct
+operation:
 
-    (with-eval-after-load 'ol
-      (require 'ol-locate-file)
+1. Link abbreviations (`ol-locate-file--register-abbrevs'):
+   Expand lfile: links to file: links for display and parsing.
+
+2. Link parameters (`ol-locate-file--register-link-parameters'):
+   Define follow, export, store, and complete behavior.
+
+Call this in your init file after this package is loaded:
+
+    (with-eval-after-load \\='ol
+      (require \\='ol-locate-file)
       (ol-locate-file-setup))"
   (ol-locate-file--register-abbrevs)
-  (ol-locate-file--register-link))
+  (ol-locate-file--register-link-parameters))
 
 ;;; Footer
 

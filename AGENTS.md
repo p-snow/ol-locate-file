@@ -251,16 +251,38 @@ reliable =when-let/=.
 
 ## 8. =ol-locate-file= Specific Guidance
 
-### 8.1 Locate Program Variants
+### 8.1 =locate-make-command-line= (Emacs Built-in)
 
-| Variant   | Command   | Default DB Path            | DB Flag          |
-|-----------|-----------|----------------------------|------------------|
-| mlocate   | =locate=  | =/var/lib/mlocate/mlocate.db= | =-d=          |
-| plocate   | =plocate= | =/var/lib/plocate/plocate.db= | =--database=  |
-| GNU findutils | =locate= | (varies)               | =-d=             |
+Emacs' built-in `locate.el` provides the user option
+`locate-make-command-line`, a **function** that takes a search
+string and returns a full command list `(command args...)`.
 
-The package auto-detects plocate via =ol-locate-file--plocate-p= and
-adjusts the database flag accordingly.
+`ol-locate-file--build-command` always delegates to
+`locate-make-command-line` to obtain the command line:
+- It calls `(funcall locate-make-command-line search-string)`
+  to get the command and arguments.
+- It resolves the command via `executable-find` for use with
+  `call-process`.
+- It filters out `nil` elements from the argument list (to handle
+  `locate-prompt-for-command` which defaults to `nil`).
+
+There are no separate `ol-locate-file-command` or
+`ol-locate-file-arguments` options.  Users who wish to customize
+the locate command or its arguments should customize the standard
+Emacs variables directly:
+
+- `locate-command` (default: `"locate"`)
+- `locate-make-command-line` (for full control over the command
+  line construction)
+- `locate-prompt-for-command` (additional options to pass)
+
+This means users who customize `locate-make-command-line` in
+their init files will have those customizations automatically
+honored by `ol-locate-file`.
+
+There is **no** `locate-db` variable in Emacs' built-in
+`locate.el`.  Database selection is handled by the locate command
+itself or by `locate-make-command-line`.
 
 ### 8.2 Security
 

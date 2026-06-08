@@ -311,70 +311,6 @@ used as-is."
          ;; If locate fails, just use the raw input
          (concat type ":" partial))))))
 
-;;; Export handler
-
-(defun ol-locate-file--export (path desc backend info)
-  "Export an lfile: link by resolving PATH and delegating to file: export.
-
-PATH is resolved via the locate database.  The resolved absolute
-path is then passed to the `file:' link type's export handler.
-If no export handler is registered for `file:', the resolved
-path is returned as a plain string.
-
-DESC is the link description or nil.
-BACKEND is the export backend symbol.
-INFO is the export communication channel plist."
-  (condition-case nil
-      (let* ((search-option (and (string-match "::\\(.*\\)\\'" path)
-                                 (match-string 1 path)))
-             (search-string (if search-option
-                                (substring path 0 (match-beginning 0))
-                              path))
-             (resolved (ol-locate-file--resolve search-string))
-             (full-path (if search-option
-                            (concat resolved "::" search-option)
-                          resolved)))
-        (let ((file-export-fn (org-link-get-parameter "file" :export)))
-          (if (functionp file-export-fn)
-              (funcall file-export-fn full-path desc backend info)
-            ;; Fallback: return the resolved path verbatim
-            full-path)))
-    (user-error
-     ;; If locate fails during export, return the raw path
-     (concat ol-locate-file-link-type ":" path))))
-
-;;; Help-echo handler
-
-(defun ol-locate-file--help-echo (_window _object _position)
-  "Provide a help-echo string for lfile: links.
-Shows the link type and the raw search substring."
-  (when-let* ((context (org-element-context))
-              ((eq (org-element-type context) 'link))
-              (type (org-element-property :type context))
-              ((or (string= type ol-locate-file-link-type)
-                   (string= type (concat ol-locate-file-link-type "+emacs"))
-                   (string= type (concat ol-locate-file-link-type "+sys"))))
-              (path (org-element-property :path context)))
-    (format "%s: %s  (resolved via locate)" type path)))
-
-;;; Face definition (face that inherits from org-link)
-
-(defface ol-locate-file-link
-  '((t :inherit org-link))
-  "Face for ol-locate-file links.
-Inherits from `org-link' by default.  Customize this to visually
-distinguish locate-based links from regular file links."
-  :group 'ol-locate-file)
-
-;;; Keymap
-
-(defvar ol-locate-file-link-map
-  (let ((map (make-sparse-keymap)))
-    (define-key map [mouse-1] 'org-open-at-point)
-    (define-key map [mouse-2] 'org-open-at-point)
-    map)
-  "Keymap active on ol-locate-file links.")
-
 ;;; Link type registration
 
 (defun ol-locate-file--register-abbrevs ()
@@ -404,8 +340,8 @@ link behavior (follow, export, store, complete)."
 (defun ol-locate-file--register-link-parameters ()
   "Register link behavior via `org-link-set-parameters'.
 
-Registers :follow, :store, :export, :complete, :face, :help-echo,
-and :keymap for the link type and its +emacs/+sys variants.
+Registers :follow, :store, and :complete for the link type and its +emacs/+sys
+variants.
 
 This defines what happens when a link is clicked, exported, or
 stored.  Display and parsing are handled separately by
@@ -419,31 +355,19 @@ control display, while parameters control behavior."
    ol-locate-file-link-type
    :follow #'ol-locate-file--follow
    :store #'ol-locate-file-store-link
-   :export #'ol-locate-file--export
-   :complete #'ol-locate-file-complete-link
-   :face 'ol-locate-file-link
-   :help-echo #'ol-locate-file--help-echo
-   :keymap ol-locate-file-link-map)
+   :complete #'ol-locate-file-complete-link)
 
   ;; Register lfile+emacs variant
   (org-link-set-parameters
    (concat ol-locate-file-link-type "+emacs")
    :follow #'ol-locate-file--follow-emacs
-   :store #'ol-locate-file-store-link
-   :export #'ol-locate-file--export
-   :face 'ol-locate-file-link
-   :help-echo #'ol-locate-file--help-echo
-   :keymap ol-locate-file-link-map)
+   :store #'ol-locate-file-store-link)
 
   ;; Register lfile+sys variant
   (org-link-set-parameters
    (concat ol-locate-file-link-type "+sys")
    :follow #'ol-locate-file--follow-sys
-   :store #'ol-locate-file-store-link
-   :export #'ol-locate-file--export
-   :face 'ol-locate-file-link
-   :help-echo #'ol-locate-file--help-echo
-   :keymap ol-locate-file-link-map))
+   :store #'ol-locate-file-store-link))
 
 ;;;###autoload
 (defun ol-locate-file-setup ()

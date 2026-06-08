@@ -284,32 +284,34 @@ follow-time via the locate database."
 
 ;;; Complete handler
 
-(defun ol-locate-file-complete-link ()
+(defun ol-locate-file-complete-link (&optional _arg)
   "Complete an lfile: link using the locate database.
 
-This function is called by `org-insert-link' when the link type
-is the value of `ol-locate-file-link-type'.  It queries the
-locate database to provide completion candidates.
-
-If the locate query returns no results, the user's raw input is
-used as-is."
+Works correctly with any completion style, including Orderless
+\(which passes an empty string to the dynamic completion table)
+and traditional styles like `basic', `partial-completion', etc.
+\(which pass the actual minibuffer input)."
   (let* ((type ol-locate-file-link-type)
-         (prompt (format "%s (locate search): " type))
-         (partial (read-string prompt)))
-    (if (string-empty-p partial)
+         (choice
+          (completing-read
+           (format "%s: " type)
+           (completion-table-dynamic
+            (lambda (str)
+              (let ((input
+                     (if (and (string-empty-p str)
+                              (minibufferp))
+                         ;; Support orderless which sends str as empty
+                         (minibuffer-contents-no-properties)
+                       str)))
+                (if (string-empty-p input)
+                    nil
+                  (condition-case nil
+                      (ol-locate-file--run-locate input)
+                    (user-error nil))))))
+           nil nil nil 'ol-locate-file--history)))
+    (if (string-empty-p choice)
         (concat type ":")
-      (condition-case nil
-          (let* ((candidates (ol-locate-file--run-locate partial))
-                 (choice (if (cdr candidates)
-                             (completing-read
-                              (format "Choose file for %s: " type)
-                              candidates nil t nil
-                              'ol-locate-file--history)
-                           (car candidates))))
-            (concat type ":" choice))
-        (user-error
-         ;; If locate fails, just use the raw input
-         (concat type ":" partial))))))
+      (concat type ":" (file-name-nondirectory choice)))))
 
 ;;; Link type registration
 

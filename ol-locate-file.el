@@ -134,11 +134,16 @@ locate command and its arguments."
 Returns a list of absolute file paths matching SEARCH-STRING.
 If no results are found, signals `user-error'.
 
+SEARCH-STRING is expanded via `substitute-in-file-name' before
+being passed to locate, so `~' and `$VAR' references are resolved
+to their absolute equivalents.
+
 The command is executed via `call-process' to avoid shell
 injection risks.  No shell metacharacters are interpreted."
   (when (string-empty-p search-string)
     (user-error "Empty search string; please provide a substring to search for"))
-  (let* ((cmd-args (ol-locate-file--build-command search-string))
+  (let* ((expanded (substitute-in-file-name search-string))
+         (cmd-args (ol-locate-file--build-command expanded))
          (cmd (car cmd-args))
          (args (cdr cmd-args))
          (max-results ol-locate-file-max-results))
@@ -162,7 +167,7 @@ injection risks.  No shell metacharacters are interpreted."
                 (cl-incf count)))
             (forward-line 1))
           (if results
-              (nreverse results)
+              (nreverse (delete-dups results))
             (user-error "No file matching \"%s\" found in locate database"
                         search-string)))))))
 
@@ -223,6 +228,41 @@ with the \"%(ol-locate-file-locate)\" syntax."
 
 ;;; Store handler
 
+(defun ol-locate-file--shortest-unique-suffix (file-path)
+  "Compute the shortest unique suffix of FILE-PATH among locate results.
+
+Run locate with the basename of FILE-PATH, collect all matches,
+and return the shortest suffix (from the end of the path components)
+that uniquely identifies FILE-PATH among those matches.
+
+When exactly one result matches the basename, return just the
+basename.  When multiple results match, prepend directory components
+from the parent upward until the suffix is unique.
+
+Return nil if FILE-PATH is not found in the locate database."
+  (let ((basename (file-name-nondirectory file-path)))
+    (condition-case nil
+        (let* ((results (ol-locate-file--run-locate basename))
+               (count (length results)))
+          (when (member file-path results)
+            (if (= 1 count)
+                basename
+              (let* ((dir (file-name-directory file-path))
+                     (components (when dir
+                                   (split-string
+                                    (directory-file-name dir) "/" t)))
+                     (suffix basename))
+                (cl-loop for comp in (nreverse components)
+                         do (setq suffix (concat comp "/" suffix))
+                         when (= 1
+                                (cl-count-if
+                                 (lambda (r)
+                                   (string-suffix-p suffix r))
+                                 results))
+                         return suffix
+                         finally return suffix)))))
+      (user-error nil))))
+
 ;;;###autoload
 (defun ol-locate-file-store-link ()
   "Store a link to the current file using the lfile link type.
@@ -230,33 +270,44 @@ with the \"%(ol-locate-file-locate)\" syntax."
 When `ol-locate-file-store-link-p' is nil, do nothing and
 return nil, allowing the default file: link handler to operate.
 
-When in `dired-mode', stores the basename of the file at point
-with no description.
+When the file is not found in the locate database, does nothing.
+
+When in `dired-mode', stores a link to the file at point.
 When visiting a file, delegates to `org-link--file-link-to-here'
 to obtain the file path and search option (e.g. line number or
-heading), then stores the basename with that search option.
-The stored link uses only the basename, which is resolved at
-follow-time via the locate database."
+heading), then stores the link with that search option.
+
+The stored link uses the shortest unique path suffix, which is the
+basename when it uniquely identifies the file, or a longer
+directory-qualified suffix when disambiguation is needed.  This
+suffix is resolved at follow-time via the locate database."
   (when ol-locate-file-store-link-p
     (let ((type ol-locate-file-link-type))
       (cond
        ((derived-mode-p 'dired-mode)
         (when-let* ((path (dired-get-filename nil t))
-                    (file (abbreviate-file-name
-                           (expand-file-name path))))
+                    (file (expand-file-name path))
+                    (suffix (ol-locate-file--shortest-unique-suffix file)))
           (org-link-store-props
            :type type
-           :link (concat type ":" (file-name-nondirectory file))
+           :link (concat type ":" suffix)
            :description nil)))
        ((buffer-file-name (buffer-base-buffer))
         (let* ((here (org-link--file-link-to-here))
-               (path (replace-regexp-in-string
-                      "^file:" "" (car here)))
-               (desc (cdr here)))
-          (org-link-store-props
-           :type type
-           :link (concat type ":" (file-name-nondirectory path))
-           :description desc)))
+               (raw-path (replace-regexp-in-string
+                          "^file:" "" (car here)))
+               (desc (cdr here))
+               ;; Split off any search option suffix (::...)
+               (path-search (split-string raw-path "::" t))
+               (file-path (expand-file-name (car path-search)))
+               (search-opt (cadr path-search))
+               (suffix (ol-locate-file--shortest-unique-suffix file-path)))
+          (when suffix
+            (org-link-store-props
+             :type type
+             :link (concat type ":" suffix
+                           (if search-opt (concat "::" search-opt) ""))
+             :description desc))))
        (t
         nil)))))
 

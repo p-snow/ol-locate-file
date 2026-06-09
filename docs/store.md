@@ -23,25 +23,49 @@ links in existing Org documents can set this to `nil`:
 
 ## Store Behavior (when the flag is non-nil)
 
+Before storing a link, the handler verifies that the file exists
+in the locate database by running locate with the file's basename.
+If the file is not found, no `lfile:` link is stored (returns nil).
+
 1. **File-visiting buffer**: Calls `org-link--file-link-to-here` to
    obtain the file path and any search option (line number, Org
-   heading `#name`, or `*target`).  Extracts the basename and stores
-   an `lfile:` link.  The description comes from
-   `org-link--file-link-to-here` (e.g., an Org heading text).
+   heading `#name`, or `*target`).  If the file is found in the
+   locate database, stores an `lfile:` link using the shortest unique
+   path suffix (see "Link Suffix Disambiguation" below).  The
+   description comes from `org-link--file-link-to-here` (e.g., an
+   Org heading text).
 
 2. **Dired mode**: Uses `dired-get-filename` to get the file at
-   point, extracts the basename, and stores an `lfile:` link with
-   no description.
+   point.  If the file is found in the locate database, stores an
+   `lfile:` link using the shortest unique path suffix, with no
+   description.
 
 3. **Other buffers**: Does nothing (returns nil), which lets Org's
    built-in store handlers work as usual.
 
+## Link Suffix Disambiguation
+
+Instead of always using the bare basename, the handler computes the
+**shortest unique suffix** of the file path among all files in the
+locate database that share the same basename.
+
+- When the basename is already unique, the stored link uses just the
+  basename (e.g. `lfile:emacsclient`).
+- When multiple files share the same basename, parent directory
+  components are prepended one by one until the suffix is unique
+  (e.g. `lfile:bin/emacsclient` or `lfile:local/bin/emacsclient`).
+
+This ensures that following the stored link resolves to the correct
+file without ambiguity, even when the same filename appears in
+multiple locations.
+
 ## Link Format
 
-The stored link uses only the basename of the file (via
-`file-name-nondirectory`), so it looks like `lfile:emacsclient`
-instead of `lfile:/usr/bin/emacsclient`.  The basename is resolved
-at follow-time via the locate database (see `ol-locate-file--resolve`).
+The stored link uses the shortest unique path suffix, so it looks
+like `lfile:emacsclient` (when unique) or `lfile:bin/emacsclient`
+(when disambiguation is needed).  The suffix is resolved at
+follow-time via the locate database (see `ol-locate-file--resolve`
+and `ol-locate-file--shortest-unique-suffix`).
 
 When in a file-visiting buffer, the link may include a search option
 suffix such as `lfile:foo.el::10` (line number) or
@@ -54,8 +78,8 @@ When storing, the handler sets these properties via
 `org-link-store-props`:
 
 - `:type` — `ol-locate-file-link-type` (default: `"lfile"`)
-- `:link` — The `lfile:` URI (e.g. `"lfile:emacsclient"` or
-  `"lfile:foo.el::10"`)
+- `:link` — The `lfile:` URI (e.g. `"lfile:emacsclient"`,
+  `"lfile:bin/emacsclient"`, or `"lfile:foo.el::10"`)
 - `:description` — For file-visiting buffers, the description from
   `org-link--file-link-to-here` (e.g. an Org heading).  For dired
   buffers, `nil` (no description).

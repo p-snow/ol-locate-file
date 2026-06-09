@@ -4,6 +4,18 @@ This document provides conventions, practices, and reference
 information for AI-assisted development of Emacs Lisp packages,
 with specific guidance for the `ol-locate-file` project.
 
+## 0. Documentation Policy
+
+- **`docs/` directory**: Specific behavior designs, redesign notes, and
+  detailed explanations of individual features must be documented in
+  separate files under the `docs/` directory (e.g., `docs/complete.md`).
+- **`AGENTS.md`**: This file is reserved for coding conventions,
+  submission requirements, reference material, and project-wide
+  guidance.  Do **not** write feature-specific behavior details here.
+- When a new design or behavior change is discussed, create or update
+  the corresponding file in `docs/` and mention it briefly in
+  `AGENTS.md` only if it affects a convention or reference entry.
+
 ## 1. Emacs Lisp Coding Conventions
 
 ### 1.1 Naming Rules

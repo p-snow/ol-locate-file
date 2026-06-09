@@ -91,6 +91,18 @@ substring is very short and matches many files."
   :type 'integer
   :group 'ol-locate-file)
 
+(defcustom ol-locate-file-store-link-p t
+  "Whether `ol-locate-file-store-link' should store lfile: links.
+
+When non-nil (the default), `org-store-link' stores an lfile: link
+for the current file.  When nil, `ol-locate-file-store-link' does
+nothing, allowing the default file: link type to take effect.
+
+Users who prefer file: links for storing but still want lfile:
+links for existing Org documents can set this to nil."
+  :type 'boolean
+  :group 'ol-locate-file)
+
 ;;; Internal variables
 
 (defvar ol-locate-file--history nil
@@ -215,29 +227,38 @@ with the \"%(ol-locate-file-locate)\" syntax."
 (defun ol-locate-file-store-link ()
   "Store a link to the current file using the lfile link type.
 
-When in `dired-mode', uses the basename of the file at point.
-When visiting a file, uses the basename of the buffer file.
+When `ol-locate-file-store-link-p' is nil, do nothing and
+return nil, allowing the default file: link handler to operate.
+
+When in `dired-mode', stores the basename of the file at point
+with no description.
+When visiting a file, delegates to `org-link--file-link-to-here'
+to obtain the file path and search option (e.g. line number or
+heading), then stores the basename with that search option.
 The stored link uses only the basename, which is resolved at
 follow-time via the locate database."
-  (let ((type ol-locate-file-link-type))
-    (cond
-     ((derived-mode-p 'dired-mode)
-      (let ((file (dired-get-filename nil t)))
-        (when file
+  (when ol-locate-file-store-link-p
+    (let ((type ol-locate-file-link-type))
+      (cond
+       ((derived-mode-p 'dired-mode)
+        (when-let* ((path (dired-get-filename nil t))
+                    (file (abbreviate-file-name
+                           (expand-file-name path))))
           (org-link-store-props
            :type type
            :link (concat type ":" (file-name-nondirectory file))
-           :description (abbreviate-file-name file)))))
-     ((buffer-file-name)
-      (let ((file (buffer-file-name)))
-        (org-link-store-props
-         :type type
-         :link (concat type ":" (file-name-nondirectory file))
-         :description (abbreviate-file-name file))))
-     (t
-      ;; Not in a file-visiting buffer or dired; fall back to
-      ;; whatever Org's default store would do.
-      nil))))
+           :description nil)))
+       ((buffer-file-name (buffer-base-buffer))
+        (let* ((here (org-link--file-link-to-here))
+               (path (replace-regexp-in-string
+                      "^file:" "" (car here)))
+               (desc (cdr here)))
+          (org-link-store-props
+           :type type
+           :link (concat type ":" (file-name-nondirectory path))
+           :description desc)))
+       (t
+        nil)))))
 
 ;;; Complete handler
 

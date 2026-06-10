@@ -226,6 +226,47 @@ with the \"%(ol-locate-file-locate)\" syntax."
             resolved))
       (user-error tag))))
 
+;;; Follow handlers
+
+(defun ol-locate-file--follow (path _arg)
+  "Follow an lfile: link by resolving PATH via locate and opening the file.
+Equivalent to following a file: link with the resolved path.
+ARG is the universal prefix argument (currently unused)."
+  (ol-locate-file--follow-impl path nil))
+
+(defun ol-locate-file--follow-emacs (path _arg)
+  "Follow an lfile+emacs: link by resolving PATH and opening in Emacs.
+Equivalent to following a file+emacs: link."
+  (ol-locate-file--follow-impl path 'emacs))
+
+(defun ol-locate-file--follow-sys (path _arg)
+  "Follow an lfile+sys: link by resolving PATH and opening with system app.
+Equivalent to following a file+sys: link."
+  (ol-locate-file--follow-impl path 'system))
+
+(defun ol-locate-file--follow-impl (path in-emacs)
+  "Core follow implementation for all ol-locate-file link variants.
+
+PATH is the raw link path, which may include a \"::search-option\"
+suffix.  The search option is preserved and passed through to
+`org-link-open-as-file'.
+
+IN-EMACS is passed directly to `org-link-open-as-file' and
+controls how the file is opened:
+- nil       → use `org-file-apps' to decide
+- `emacs'   → always open in Emacs
+- `system'  → always open with system application"
+  (let* ((search-option (and (string-match "::\\(.*\\)\\'" path)
+                             (match-string 1 path)))
+         (search-string (if search-option
+                            (substring path 0 (match-beginning 0))
+                          path))
+         (resolved (ol-locate-file--resolve search-string))
+         (full-path (if search-option
+                        (concat resolved "::" search-option)
+                      resolved)))
+    (org-link-open-as-file full-path in-emacs)))
+
 ;;; Store handler
 
 (defun ol-locate-file--shortest-unique-suffix (file-path)
@@ -344,30 +385,6 @@ and traditional styles like `basic', `partial-completion', etc.
 
 ;;; Link type registration
 
-(defun ol-locate-file--register-abbrevs ()
-  "Register link abbreviations for display purposes.
-
-Registers lfile:, lfile+emacs, and lfile+sys abbreviations in
-`org-link-abbrev-alist'.  Abbreviations expand links to file:
-equivalents at parse time, using the first locate match (non-
-interactive).
-
-See also `ol-locate-file--register-link-parameters', which defines
-link behavior (store, complete)."
-  (let ((type ol-locate-file-link-type))
-    (cl-pushnew (cons type
-                      (concat "file:%(ol-locate-file-locate)"))
-                org-link-abbrev-alist
-                :test #'equal)
-    (cl-pushnew (cons (concat type "+emacs")
-                      (concat "file+emacs:%(ol-locate-file-locate)"))
-                org-link-abbrev-alist
-                :test #'equal)
-    (cl-pushnew (cons (concat type "+sys")
-                      (concat "file+sys:%(ol-locate-file-locate)"))
-                org-link-abbrev-alist
-                :test #'equal)))
-
 (defun ol-locate-file--register-link-parameters ()
   "Register link behavior via `org-link-set-parameters'.
 
@@ -375,47 +392,32 @@ Registers :store and :complete for the link type and its +emacs/+sys
 variants.
 
 This defines what happens when a link is clicked, exported, or
-stored.  Display and parsing are handled separately by
-`ol-locate-file--register-abbrevs', which expands lfile: links to
-file: links at parse time using the first locate match.
+stored.
 
 The dual registration (abbrevs + parameters) is required: abbrevs
 control display, while parameters control behavior."
   ;; Register the main link type
   (org-link-set-parameters
    ol-locate-file-link-type
+   :follow #'ol-locate-file--follow
    :store #'ol-locate-file-store-link
    :complete #'ol-locate-file-complete-link)
 
   ;; Register lfile+emacs variant
   (org-link-set-parameters
    (concat ol-locate-file-link-type "+emacs")
+   :follow #'ol-locate-file--follow-emacs
    :store #'ol-locate-file-store-link)
 
   ;; Register lfile+sys variant
   (org-link-set-parameters
    (concat ol-locate-file-link-type "+sys")
+   :follow #'ol-locate-file--follow-sys
    :store #'ol-locate-file-store-link))
 
 ;;;###autoload
 (defun ol-locate-file-setup ()
-  "Set up the ol-locate-file link type.
-
-This function performs two registrations required for correct
-operation:
-
-1. Link abbreviations (`ol-locate-file--register-abbrevs'):
-   Expand lfile: links to file: links for display and parsing.
-
-2. Link parameters (`ol-locate-file--register-link-parameters'):
-   Define store and complete behavior.
-
-Call this in your init file after this package is loaded:
-
-    (with-eval-after-load \\='ol
-      (require \\='ol-locate-file)
-      (ol-locate-file-setup))"
-  (ol-locate-file--register-abbrevs)
+  "Set up the ol-locate-file link type."
   (ol-locate-file--register-link-parameters))
 
 ;;; Footer

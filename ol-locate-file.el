@@ -149,7 +149,7 @@ injection risks.  No shell metacharacters are interpreted."
          (max-results ol-locate-file-max-results))
     (with-temp-buffer
       (let ((_exit-code (apply #'call-process cmd nil
-                              (list (current-buffer) nil) nil args)))
+                               (list (current-buffer) nil) nil args)))
         ;; Note: `locate' may exit non-zero when there are no matches;
         ;; we treat an empty output buffer as "no matches" regardless
         ;; of exit code.
@@ -296,10 +296,10 @@ Return nil if FILE-PATH is not found in the locate database."
                 (cl-loop for comp in (nreverse components)
                          do (setq suffix (concat comp "/" suffix))
                          when (= 1
-                                (cl-count-if
-                                 (lambda (r)
-                                   (string-suffix-p suffix r))
-                                 results))
+                                 (cl-count-if
+                                  (lambda (r)
+                                    (string-suffix-p suffix r))
+                                  results))
                          return suffix
                          finally return suffix)))))
       (user-error nil))))

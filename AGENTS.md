@@ -6,15 +6,18 @@ with specific guidance for the `ol-locate-file` project.
 
 ## 0. Documentation Policy
 
-- **`docs/` directory**: Specific behavior designs, redesign notes, and
-  detailed explanations of individual features must be documented in
-  separate files under the `docs/` directory (e.g., `docs/complete.md`).
-- **`AGENTS.md`**: This file is reserved for coding conventions,
+- **`docs/` directory**: All feature-specific behavior designs, redesign
+  notes, and detailed explanations must be documented in separate files
+  under `docs/` (e.g., `docs/follow.md`, `docs/store.md`,
+  `docs/complete.md`).  Do **not** write design details in `AGENTS.md`.
+- **`AGENTS.md`**: Reserved exclusively for coding conventions,
   submission requirements, reference material, and project-wide
-  guidance.  Do **not** write feature-specific behavior details here.
-- When a new design or behavior change is discussed, create or update
-  the corresponding file in `docs/` and mention it briefly in
-  `AGENTS.md` only if it affects a convention or reference entry.
+  guidance.  No feature-specific design or behavior descriptions belong
+  here.
+- When a new design or behavior change is discussed, always create or
+  update the corresponding file under `docs/`.  `AGENTS.md` may only
+  briefly note such changes when they affect a convention or reference
+  entry.
 
 ## 1. Emacs Lisp Coding Conventions
 
@@ -210,38 +213,9 @@ BACKEND is the export backend symbol.  INFO is the communication plist."
 
 ---
 
-## 6. =org-link-abbrev-alist= vs =org-link-set-parameters=
+## 6. Minimum Supported Emacs Version
 
-### 6.1 When to Use =org-link-abbrev-alist=
-
-- Use when the new link type is essentially a shortcut for an existing
-  type (e.g., =lfile:= is a shortcut for =file:= with locate
-  resolution).
-- Abbreviations are expanded at parse time, so the expanded form is
-  what Org sees when activating, displaying, and following links.
-- The =%(function)= syntax allows dynamic computation of the
-  replacement value.
-
-### 6.2 When to Use =org-link-set-parameters=
-
-- Use for the primary registration of the link type's behavior
-  (=:follow=, =:store=, =:export=, =:complete=).
-- Even when abbreviations are used, registering parameters provides
-  fallback behavior (e.g., if the abbreviation expansion fails).
-
-### 6.3 Using Both Together
-
-- Register the link type via =org-link-set-parameters= with full
-  =:follow= and other handlers.
-- Register a corresponding abbreviation in =org-link-abbrev-alist= to
-  ensure consistent display and parsing.
-- This dual approach is the strategy used by =ol-locate-file=.
-
----
-
-## 7. Minimum Supported Emacs Version
-
-### 7.1 Recommendation for =ol-locate-file=: **Emacs 27.1**
+### 6.1 Recommendation for =ol-locate-file=: **Emacs 27.1**
 
 Rationale:
 
@@ -261,9 +235,20 @@ reliable =when-let/=.
 
 ---
 
-## 8. =ol-locate-file= Specific Guidance
+## 7. =ol-locate-file= Specific Guidance
 
-### 8.1 =locate-make-command-line= (Emacs Built-in)
+### 7.1 Link Type Registration Strategy
+
+All link behavior is controlled exclusively through
+`org-link-set-parameters`.  There is **no** use of
+`org-link-abbrev-alist`.  The follow, store, and complete handlers
+registered via `org-link-set-parameters` are the sole mechanism for
+controlling `lfile:` link type behavior.
+
+See `docs/follow.md`, `docs/store.md`, and `docs/complete.md` for
+detailed design descriptions of each handler.
+
+### 7.2 =locate-make-command-line= (Emacs Built-in)
 
 Emacs' built-in `locate.el` provides the user option
 `locate-make-command-line`, a **function** that takes a search
@@ -296,36 +281,16 @@ There is **no** `locate-db` variable in Emacs' built-in
 `locate.el`.  Database selection is handled by the locate command
 itself or by `locate-make-command-line`.
 
-### 8.2 Security
+### 7.3 Security
 
 - **Always** use =call-process= (or =make-process=) for external
   command execution — never =shell-command= with user-supplied input.
 - The locate search string is passed as a direct argument to
   =call-process=, which bypasses shell interpretation entirely.
 
-### 8.3 Link Resolution Flow
-
-```
-User: [[lfile:emacsclient]]
-       ↓
-org-link-abbrev-alist expansion (non-interactive):
-  → ol-locate-file-locate("emacsclient")
-  → Runs locate → returns "/usr/bin/emacsclient" (first result)
-  → Expanded to: file:/usr/bin/emacsclient
-       ↓
-Display: file:/usr/bin/emacsclient  (for font-lock / help-echo)
-       ↓
-User opens link (org-open-at-point):
-  → ol-locate-file--follow("emacsclient", nil)
-  → ol-locate-file--resolve("emacsclient")
-  → Runs locate → if single result, return it
-  → If multiple results, completing-read → user selects
-  → org-link-open-as-file("/usr/bin/emacsclient", nil)
-```
-
 ---
 
-## 9. References
+## 8. References
 
 - [Org Mode Manual: Adding Hyperlink Types](https://orgmode.org/manual/Adding-Hyperlink-Types.html)
 - [GNU Emacs Manual: locate.el](https://www.gnu.org/software/emacs/manual/html_node/emacs/Dired-and-Find.html)

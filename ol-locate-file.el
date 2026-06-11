@@ -43,10 +43,8 @@
 ;;   - lfile+emacs:  → equivalent to file+emacs:  (find-file in Emacs)
 ;;   - lfile+sys:    → equivalent to file+sys:    (open with system app)
 ;;
-;; The mechanism uses `org-link-abbrev-alist' internally to delegate
-;; to the built-in `file:' link type after resolving the partial
-;; substring via the locate database.  The link type name itself
-;; (default "lfile") is customizable via `ol-locate-file-link-type'.
+;; The link type name (default "lfile") is customizable via
+;; `ol-locate-file-link-type'.
 ;;
 ;; When multiple files match the search substring, the user is
 ;; prompted with `completing-read' to select the intended target.
@@ -195,36 +193,6 @@ When exactly one matches, return it directly."
         (if (string-empty-p choice)
             (user-error "No file selected")
           choice)))))
-
-;;; Abbreviation expansion function (for org-link-abbrev-alist)
-
-(defun ol-locate-file-locate (tag)
-  "Resolve TAG to an absolute file path using locate, without prompting.
-
-TAG is the link path substring, which may include an Org search
-option after \"::\" (e.g. \"emacsclient::10\").  The portion
-before \"::\" is used as the locate search term; any search
-option is preserved in the output.
-
-When multiple files match, the first result is returned silently
-  (this function is designed for non-interactive use during link
-  abbreviation expansion).  Use `ol-locate-file--resolve' for
-interactive prompting.
-
-This function is intended for use in `org-link-abbrev-alist'
-with the \"%(ol-locate-file-locate)\" syntax."
-  (let (search-string search-option)
-    (if (string-match "::\\(.*\\)\\'" tag)
-        (setq search-string (substring tag 0 (match-beginning 0))
-              search-option (match-string 1 tag))
-      (setq search-string tag
-            search-option nil))
-    (condition-case nil
-        (let ((resolved (car (ol-locate-file--run-locate search-string))))
-          (if search-option
-              (concat resolved "::" search-option)
-            resolved))
-      (user-error tag))))
 
 ;;; Follow handlers
 
@@ -388,14 +356,10 @@ and traditional styles like `basic', `partial-completion', etc.
 (defun ol-locate-file--register-link-parameters ()
   "Register link behavior via `org-link-set-parameters'.
 
-Registers :store and :complete for the link type and its +emacs/+sys
-variants.
-
-This defines what happens when a link is clicked, exported, or
-stored.
-
-The dual registration (abbrevs + parameters) is required: abbrevs
-control display, while parameters control behavior."
+Registers :follow, :store, and :complete for the link type and its
++emacs/+sys variants.  All link behavior is controlled through
+these parameters alone — there is no `org-link-abbrev-alist'
+involvement."
   ;; Register the main link type
   (org-link-set-parameters
    ol-locate-file-link-type

@@ -412,9 +412,20 @@ and traditional styles like `basic', `partial-completion', etc.
                        str)))
                 (if (string-empty-p input)
                     nil
-                  (condition-case nil
-                      (org-locate-file--run-locate input)
-                    (user-error nil))))))
+                  ;; Support multi-token input (Orderless etc.) by
+                  ;; querying locate for each token individually and
+                  ;; combining results.  This gives the completion
+                  ;; style a broad candidate set to filter.
+                  (let ((tokens (split-string input "[ \t]+" t)))
+                    (if (cdr tokens)
+                        (delete-dups
+                         (cl-loop for token in tokens
+                                  append (condition-case nil
+                                             (org-locate-file--run-locate token)
+                                           (user-error nil))))
+                      (condition-case nil
+                          (org-locate-file--run-locate input)
+                        (user-error nil))))))))
            nil nil nil 'org-locate-file--history)))
     (if (string-empty-p choice)
         (concat type ":")

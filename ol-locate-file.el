@@ -48,6 +48,9 @@
 ;;
 ;; When multiple files match the search substring, the user is
 ;; prompted with `completing-read' to select the intended target.
+;; This behavior can be customized via
+;; `org-locate-file-follow-auto', which supports automatic selection
+;; (first result, most recently modified, or a custom function).
 ;;
 ;; The locate command is invoked via Emacs' built-in `locate-make-command-line',
 ;; so any customizations to that variable (or to `locate-command',
@@ -99,6 +102,26 @@ nothing, allowing the default file: link type to take effect.
 Users who prefer file: links for storing but still want lfile:
 links for existing Org documents can set this to nil."
   :type 'boolean
+  :group 'org-locate-file)
+
+(defcustom org-locate-file-follow-auto nil
+  "How to automatically select a candidate when multiple files match.
+
+When nil (the default), the user is prompted to choose from the
+matching candidates via `completing-read'.
+
+When t, the first candidate from locate output is used without
+confirmation.
+
+When the symbol `recent', the candidate with the most recent
+modification time is selected among the matching files.
+
+When a function, it is called with the list of candidate file
+paths and must return a single file path string."
+  :type '(choice (const :tag "Prompt user" nil)
+                 (const :tag "First result" t)
+                 (const :tag "Most recently modified" recent)
+                 (function :tag "Custom function"))
   :group 'org-locate-file)
 
 ;;; Internal variables
@@ -192,28 +215,55 @@ injection risks.  No shell metacharacters are interpreted."
 
 ;;; Path resolution engine
 
+(defun org-locate-file--pick-recent (candidates)
+  "Select the most recently modified file from CANDIDATES list.
+Returns the file path with the latest modification time.
+If modification times cannot be determined, falls back to
+the first candidate."
+  (let* ((pairs (mapcar
+                 (lambda (f)
+                   (cons f (file-attribute-modification-time
+                            (file-attributes f))))
+                 candidates))
+         (valid (delq nil (mapcar
+                           (lambda (p) (and (cdr p) p))
+                           pairs))))
+    (if valid
+        (caar (sort valid (lambda (a b)
+                            (time-less-p (cdr b) (cdr a)))))
+      (car candidates))))
+
 (defun org-locate-file--resolve (search-string)
   "Resolve SEARCH-STRING to a single file path using locate.
-When multiple files match, prompt the user via `completing-read'.
+When multiple files match and `org-locate-file-follow-auto' is
+nil, prompt the user via `completing-read'.  Otherwise, select
+automatically based on the value of that variable.
 When exactly one matches, return it directly."
   (let ((candidates (org-locate-file--run-locate search-string)))
     (if (null (cdr candidates))
-        ;; Exactly one result: return immediately
         (car candidates)
-      ;; Multiple results: prompt the user to choose
-      (let ((choice
-             (completing-read
-              (format "Multiple matches for \"%s\" (choose one): " search-string)
-              (lambda (string pred action)
-                (if (eq action 'metadata)
-                    '(metadata
-                      (display-sort-function . identity)
-                      (cycle-sort-function . identity))
-                  (complete-with-action action candidates string pred)))
-              nil t nil 'org-locate-file--history)))
-        (if (string-empty-p choice)
-            (user-error "No file selected")
-          choice)))))
+      (pcase org-locate-file-follow-auto
+        ((pred functionp)
+         (funcall org-locate-file-follow-auto candidates))
+        ('recent
+         (org-locate-file--pick-recent candidates))
+        ((pred identity)
+         (car candidates))
+        (_
+         (let ((choice
+                (completing-read
+                 (format "Multiple matches for \"%s\" (choose one): "
+                         search-string)
+                 (lambda (string pred action)
+                   (if (eq action 'metadata)
+                       '(metadata
+                         (display-sort-function . identity)
+                         (cycle-sort-function . identity))
+                     (complete-with-action action candidates string pred)))
+                 nil t nil 'org-locate-file--history)))
+           (if (string-empty-p choice)
+               (user-error "No file selected")
+             choice)))))))
 
 ;;; Follow handlers
 

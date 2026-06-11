@@ -39,7 +39,11 @@ org-locate-file--resolve("emacsclient")
        │       → ("/usr/bin/emacsclient", "/usr/bin/emacs", ...)
        │
        ├── Single result → return "/usr/bin/emacsclient"
-       └── Multiple results → completing-read → user selects one
+       └── Multiple results:
+            ├── org-locate-file-follow-auto = nil  → completing-read
+            ├── org-locate-file-follow-auto = t    → first result
+            ├── org-locate-file-follow-auto = 'recent → most recent mtime
+            └── org-locate-file-follow-auto = fn   → (funcall fn candidates)
        │
        ▼
 org-link-open-as-file("/usr/bin/emacsclient::10", nil)
@@ -62,3 +66,6 @@ org-link-open-as-file("/usr/bin/emacsclient::10", nil)
 - Each variant is registered as a separate link type (not as a
   parameter on a single type), which is required for Org to dispatch
   the correct follow function based on the link prefix.
+- `org-locate-file-follow-auto` controls automatic candidate selection
+  when multiple files match.  See the docstring of that variable for
+  details on the possible values.

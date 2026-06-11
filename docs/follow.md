@@ -8,9 +8,9 @@ variants, each registered via `org-link-set-parameters`.
 
 | Link Type       | Follow Function              | Effect |
 |-----------------|------------------------------|--------|
-| `lfile:PATH`    | `ol-locate-file--follow`     | Opens resolved file using `org-file-apps` |
-| `lfile+emacs:PATH` | `ol-locate-file--follow-emacs` | Always opens in Emacs |
-| `lfile+sys:PATH`   | `ol-locate-file--follow-sys`   | Always opens with system application |
+| `lfile:PATH`    | `org-locate-file--follow`     | Opens resolved file using `org-file-apps` |
+| `lfile+emacs:PATH` | `org-locate-file--follow-emacs` | Always opens in Emacs |
+| `lfile+sys:PATH`   | `org-locate-file--follow-sys`   | Always opens with system application |
 
 ## Resolution Flow
 
@@ -18,20 +18,20 @@ variants, each registered via `org-link-set-parameters`.
 User opens [[lfile:emacsclient::10]]
        │
        ▼
-ol-locate-file--follow("emacsclient::10", nil)
+org-locate-file--follow("emacsclient::10", nil)
        │
        ▼
-ol-locate-file--follow-impl("emacsclient::10", nil)
+org-locate-file--follow-impl("emacsclient::10", nil)
        │
        ├── Extracts search option: "10"
        ├── Extracts search string: "emacsclient"
        │
        ▼
-ol-locate-file--resolve("emacsclient")
+org-locate-file--resolve("emacsclient")
        │
-       ├── ol-locate-file--run-locate("emacsclient")
+       ├── org-locate-file--run-locate("emacsclient")
        │   │
-       │   ├── ol-locate-file--build-command("emacsclient")
+       │   ├── org-locate-file--build-command("emacsclient")
        │   │   └── locate-make-command-line("emacsclient")
        │   │       → ("locate" "--regex" "emacsclient")
        │   │

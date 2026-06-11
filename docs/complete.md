@@ -1,8 +1,8 @@
-# Complete Handler: `ol-locate-file-complete-link`
+# Complete Handler: `org-locate-file-complete-link`
 
 When the user invokes `org-insert-link` (typically `C-c C-l`) and
 selects the `lfile:` link type (or whatever
-`ol-locate-file-link-type` is set to), the complete handler is
+`org-locate-file-link-type` is set to), the complete handler is
 called to allow the user to choose a link target.
 
 ## Behavior
@@ -27,7 +27,7 @@ called to allow the user to choose a link target.
    the user's raw input is used as-is.  This allows typing a path
    that is not in the locate database.
 
-5. The history variable `ol-locate-file--history` stores previously
+5. The history variable `org-locate-file--history` stores previously
    selected basenames for easy recall.
 
 ## Example
@@ -43,9 +43,9 @@ called to allow the user to choose a link target.
 ## Design Notes
 
 - The `:complete` handler is registered via `org-link-set-parameters`
-  in `ol-locate-file--register-link-parameters`.
+  in `org-locate-file--register-link-parameters`.
 - The dynamic table is constructed with `completion-table-dynamic`,
-  which calls `ol-locate-file--run-locate` on each completion
+  which calls `org-locate-file--run-locate` on each completion
   request with the current minibuffer input.
 - Only basenames are used so that links are concise and remain
   resolvable at follow-time regardless of the file's absolute path.

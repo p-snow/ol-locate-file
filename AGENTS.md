@@ -25,11 +25,16 @@ with specific guidance for the `ol-locate-file` project.
 
 - **Prefix**: All symbols (functions, variables, macros, faces) must
   use a package-specific prefix.  For `ol-locate-file`, use
-  `ol-locate-file-` for public symbols and `ol-locate-file--` for
+  `org-locate-file-` for public symbols and `org-locate-file--` for
   private (internal) symbols (double hyphen convention).
+- **Package/File vs Prefix**: The package name and file name
+  (`ol-locate-file`) follow the `ol-xxx.el` convention used by
+  Org-bundled link packages, but the symbol prefix is
+  `org-locate-file-` (not `ol-locate-file-`), matching the
+  `org-xxx-` convention that those same packages use for symbols.
 - **Hyphenation**: Use hyphens (`-`) to separate words in symbol
   names.  Never use underscores or camelCase.
-  - Good: `ol-locate-file-link-type`
+  - Good: `org-locate-file-link-type`
   - Bad: `ol_locate_file_link_type`, `olLocateFileLinkType`
 
 ### 1.2 Documentation Strings (Docstrings)
@@ -45,7 +50,7 @@ with specific guidance for the `ol-locate-file` project.
 
 Example:
 #+end_srcelisp
-(defun ol-locate-file--resolve (search-string)
+(defun org-locate-file--resolve (search-string)
   "Resolve SEARCH-STRING to a single file path using locate.
 
 When multiple files match, prompt the user via =completing-read'.
@@ -112,7 +117,7 @@ The first line must follow this exact format:
 ### 2.4 Autoload Cookies
 
 - Use =;;;###autoload= before interactive entry points and key setup
-  functions (e.g., =ol-locate-file-setup=).
+  functions (e.g., =org-locate-file-setup=).
 - Do NOT autoload internal functions.
 
 ### 2.5 Optional Headers
@@ -254,7 +259,7 @@ Emacs' built-in `locate.el` provides the user option
 `locate-make-command-line`, a **function** that takes a search
 string and returns a full command list `(command args...)`.
 
-`ol-locate-file--build-command` always delegates to
+`org-locate-file--build-command` always delegates to
 `locate-make-command-line` to obtain the command line:
 - It calls `(funcall locate-make-command-line search-string)`
   to get the command and arguments.
@@ -263,8 +268,8 @@ string and returns a full command list `(command args...)`.
 - It filters out `nil` elements from the argument list (to handle
   `locate-prompt-for-command` which defaults to `nil`).
 
-There are no separate `ol-locate-file-command` or
-`ol-locate-file-arguments` options.  Users who wish to customize
+There are no separate `org-locate-file-command` or
+`org-locate-file-arguments` options.  Users who wish to customize
 the locate command or its arguments should customize the standard
 Emacs variables directly:
 

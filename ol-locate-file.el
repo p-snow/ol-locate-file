@@ -106,6 +106,27 @@ links for existing Org documents can set this to nil."
 (defvar org-locate-file--history nil
   "History list for `ol-locate-file' minibuffer completions.")
 
+;; Install the link type
+
+;;;###autoload
+(with-eval-after-load 'org
+  ;; Register the main link type
+  (org-link-set-parameters
+   org-locate-file-link-type
+   :follow #'org-locate-file--follow
+   :store #'org-locate-file-store-link
+   :complete #'org-locate-file-complete-link)
+  ;; Register lfile+emacs variant
+  (org-link-set-parameters
+   (concat org-locate-file-link-type "+emacs")
+   :follow #'org-locate-file--follow-emacs
+   :store #'org-locate-file-store-link)
+  ;; Register lfile+sys variant
+  (org-link-set-parameters
+   (concat org-locate-file-link-type "+sys")
+   :follow #'org-locate-file--follow-sys
+   :store #'org-locate-file-store-link))
+
 ;;; Command construction
 
 (defun org-locate-file--build-command (search-string)
@@ -350,39 +371,6 @@ and traditional styles like `basic', `partial-completion', etc.
     (if (string-empty-p choice)
         (concat type ":")
       (concat type ":" (file-name-nondirectory choice)))))
-
-;;; Link type registration
-
-(defun org-locate-file--register-link-parameters ()
-  "Register link behavior via `org-link-set-parameters'.
-
-Registers :follow, :store, and :complete for the link type and its
-+emacs/+sys variants.  All link behavior is controlled through
-these parameters alone — there is no `org-link-abbrev-alist'
-involvement."
-  ;; Register the main link type
-  (org-link-set-parameters
-   org-locate-file-link-type
-   :follow #'org-locate-file--follow
-   :store #'org-locate-file-store-link
-   :complete #'org-locate-file-complete-link)
-
-  ;; Register lfile+emacs variant
-  (org-link-set-parameters
-   (concat org-locate-file-link-type "+emacs")
-   :follow #'org-locate-file--follow-emacs
-   :store #'org-locate-file-store-link)
-
-  ;; Register lfile+sys variant
-  (org-link-set-parameters
-   (concat org-locate-file-link-type "+sys")
-   :follow #'org-locate-file--follow-sys
-   :store #'org-locate-file-store-link))
-
-;;;###autoload
-(defun org-locate-file-setup ()
-  "Set up the ol-locate-file link type."
-  (org-locate-file--register-link-parameters))
 
 ;;; Footer
 

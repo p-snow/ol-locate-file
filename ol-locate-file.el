@@ -131,24 +131,22 @@ paths and must return a single file path string."
 
 ;; Install the link type
 
-;;;###autoload
-(with-eval-after-load 'org
-  ;; Register the main link type
-  (org-link-set-parameters
-   org-locate-file-link-type
-   :follow #'org-locate-file--follow
-   :store #'org-locate-file-store-link
-   :complete #'org-locate-file-complete-link)
-  ;; Register lfile+emacs variant
-  (org-link-set-parameters
-   (concat org-locate-file-link-type "+emacs")
-   :follow #'org-locate-file--follow-emacs
-   :store #'org-locate-file-store-link)
-  ;; Register lfile+sys variant
-  (org-link-set-parameters
-   (concat org-locate-file-link-type "+sys")
-   :follow #'org-locate-file--follow-sys
-   :store #'org-locate-file-store-link))
+;; Register the main link type
+(org-link-set-parameters
+ org-locate-file-link-type
+ :follow #'org-locate-file--follow
+ :store #'org-locate-file-store-link
+ :complete #'org-locate-file-complete-link)
+;; Register lfile+emacs variant
+(org-link-set-parameters
+ (concat org-locate-file-link-type "+emacs")
+ :follow #'org-locate-file--follow-emacs
+ :store #'org-locate-file-store-link)
+;; Register lfile+sys variant
+(org-link-set-parameters
+ (concat org-locate-file-link-type "+sys")
+ :follow #'org-locate-file--follow-sys
+ :store #'org-locate-file-store-link)
 
 ;;; Command construction
 

@@ -97,13 +97,14 @@ The first line must follow this exact format:
 
 - Declare only the minimum dependencies needed for the package to
   function.
-- Format: =;; Package-Requires: ((emacs "27.1") (org "9.0"))=
+- Format: =;; Package-Requires: ((emacs "30.1") (org "9.3"))=
 - For =ol-locate-file=, the dependencies are =emacs= (for
   =call-process=, =completing-read=, =executable-find=, =string-trim=)
   and =org= (for =org-link-set-parameters=,
-  =org-link-open-as-file=, etc.).
-- Org 9.0+ is required because =org-link-set-parameters= gained its
-  current API in Org 9.0.
+  =org-link-open-as-file=, =org-link--file-link-to-here=).
+- Org 9.3+ is specified because =ol-locate-file= uses
+  =org-link--file-link-to-here=, but this is subsumed by the Emacs
+  30.1 requirement (which bundles a newer Org).
 
 ### 2.3 License Declaration
 
@@ -220,23 +221,24 @@ BACKEND is the export backend symbol.  INFO is the communication plist."
 
 ## 6. Minimum Supported Emacs Version
 
-### 6.1 Recommendation for =ol-locate-file=: **Emacs 27.1**
+### 6.1 Recommendation for =ol-locate-file=: **Emacs 30.1**
 
 Rationale:
 
+- =org-link--file-link-to-here= (used by the store handler) was
+  introduced in Org 9.6, which ships with Emacs 29.1.  Emacs 30.1 is
+  specified as the minimum to ensure mature availability of this
+  internal API.
 - **=lexical-binding: t= is fully stable** and widely used.
 - **=when-let/= / =if-let/=** (subr-x) are available without extra
   setup.
 - **=string-trim=** is available (introduced in Emacs 26.1).
 - **=executable-find=** is stable and reliable.
-- **Org 9.0+** is bundled (Emacs 27.1 ships with Org 9.3).
-- **Wide adoption**: Emacs 27.1 was released in August 2020 and is the
-  baseline for most active Emacs users.  Many popular packages (e.g.,
-  Vertico, Corfu, Eglot) require 27.1.
+- **Org 9.7+** is bundled (Emacs 30.1 ships with Org 9.7).
 
-Earlier versions (26.x) would work with minor adjustments but represent
-a diminishing user base.  Versions before 26.x lack =string-trim= and
-reliable =when-let/=.
+Emacs 29.1 would work but 30.1 is chosen as the baseline for broader
+compatibility with the bundled Org version that includes a stable
+=org-link--file-link-to-here=.
 
 ---
 

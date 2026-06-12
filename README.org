@@ -1,0 +1,207 @@
+#+title: ol-locate-file
+#+subtitle: Locate-based file links for Org mode
+#+author: p-snow
+#+email: public (at) p-snow.org
+#+language: en
+
+* Introduction
+
+~ol-locate-file~ provides a new Org link type that resolves partial file
+path substrings into full absolute paths using the =locate= command (or a
+compatible alternative like =plocate=).
+
+Instead of writing a full absolute path:
+
+#+begin_example
+  [[file:/usr/bin/emacsclient][emacsclient]]
+#+end_example
+
+you can write just a distinctive substring:
+
+#+begin_example
+  [[lfile:emacsclient][emacsclient]]
+#+end_example
+
+The link resolves at follow-time via the locate database, so it works
+even if the file's full path is long or hard to remember.  Moreover,
+as long as the filename itself stays the same, the link remains valid
+even if the file is moved to a different directory — making your links
+resilient across system updates, reinstallations, or PC migration.
+
+Three link variants are provided:
+
+- =lfile:= — equivalent to =file:= (=find-file=, respecting =org-file-apps=)
+- =lfile+emacs:= — equivalent to =file+emacs:= (always opens in Emacs)
+- =lfile+sys:= — equivalent to =file+sys:= (always opens with system app)
+
+The link type prefix (default ~"lfile"~) is customizable via
+~org-locate-file-link-type~.
+
+* Installation
+
+** Using =use-package= with =:vc=
+
+This package is not yet available on any package archive (MELPA
+submission is planned for the future).  In the meantime, install
+directly from the repository using =:vc=:
+
+#+begin_src emacs-lisp
+  (use-package ol-locate-file
+    :vc (:url "https://github.com/p-snow/ol-locate-file"
+         :rev :last-release))
+#+end_src
+
+** Manual installation
+
+Clone the repository and add it to your =load-path=, then require the
+package:
+
+#+begin_src emacs-lisp
+  (add-to-list 'load-path "/path/to/ol-locate-file")
+  (require 'ol-locate-file)
+#+end_src
+
+* Supported operations
+
+** Follow
+
+When you open an =lfile:= link (e.g. ~C-c C-o~), the package runs the
+locate command with the link's path substring, resolves it to a single
+absolute file path, and opens it as if it were a regular =file:= link.
+
+If multiple files match, you are prompted to choose via
+~completing-read~.  This behavior can be customized — see
+~org-locate-file-follow-auto~ below.
+
+** Store
+
+When you invoke ~org-store-link~ (~C-c l~) in a file-visiting buffer or
+Dired, the handler stores an =lfile:= link using the *shortest unique
+path suffix*.  For example:
+
+- ~lfile:emacsclient~ (when the basename is unique in the locate db)
+- ~lfile:bin/emacsclient~ (when multiple files share the basename)
+
+Stored links may include search option suffixes such as ~::10~ (line
+number) or ~::#heading~ (Org heading), obtained from
+~org-link--file-link-to-here~.
+
+You can disable lfile: link storage entirely by setting
+~org-locate-file-store-link-p~ to ~nil~.
+
+** Complete
+
+When inserting a link via ~org-insert-link~ (~C-c C-l~) and selecting
+the =lfile:= type, the package queries the locate database dynamically
+as you type.  Completion candidates are basenames of matching files, and
+the inserted link uses just the basename (e.g. ~lfile:emacsclient~).
+
+If no locate results match, your raw input is used as-is, allowing you
+to type a path that is not in the locate database.
+
+* Custom variables
+
+** ~org-locate-file-link-type~
+
+~string~ (default: ~"lfile"~)
+
+The link type prefix used in Org buffers.  Changing this does not
+retroactively update existing links.
+
+** ~org-locate-file-max-results~
+
+~integer~ (default: ~500~)
+
+Maximum number of locate results to collect.  Prevents performance
+issues when the search substring is very short and matches many files.
+
+** ~org-locate-file-store-link-p~
+
+~boolean~ (default: ~t~)
+
+When non-nil, ~org-store-link~ stores an =lfile:= link.  When nil, the
+handler does nothing, allowing the default =file:= link storage.
+
+** ~org-locate-file-follow-auto~
+
+Controls automatic candidate selection when multiple files match:
+
+- ~nil~ (default): prompt the user via ~completing-read~
+- ~t~: use the first result without confirmation
+- ~'recent~: select the most recently modified file
+- ~function~: a custom function receiving the candidate list and
+  returning a single path
+
+** ~org-locate-file-locate-args~
+
+Controls how the locate command line is built:
+
+- ~nil~: delegate to Emacs' ~locate-make-command-line~
+- ~string~: e.g. ~"locate --ignore-case"~ → ~locate --ignore-case PATTERN~
+- ~list~: e.g. ~("locate" "--ignore-case")~ (search pattern appended)
+- ~function~: called with the search string; returns a command list or
+  a string
+
+* Additional notes
+
+** Search options (~::~ suffix)
+
+=lfile:= links support Org's search option syntax.  For example:
+
+#+begin_example
+  [[lfile:emacsclient::10]]
+  [[lfile:foo.el::#some-function]]
+  [[lfile:project.org::*Introduction]]
+#+end_example
+
+The search option (after ~::~) is preserved through resolution and
+passed to ~org-link-open-as-file~.  The substring before ~::~ is used
+for the locate lookup.
+
+** Export
+
+Currently, no =:export= handler is registered for the =lfile:= link
+type.  During Org export, link types without an explicit export handler
+are handled by the export backend's fallback logic.  For HTML export,
+the link is typically rendered as-is (just the raw ~lfile:PATH~ text)
+or may be dropped depending on the backend.  An export handler may be
+added in a future release.
+
+** Customizing the link type prefix
+
+If you prefer a different prefix (e.g. ~"floc"~), set
+~org-locate-file-link-type~ before loading the package:
+
+#+begin_src emacs-lisp
+  (setq org-locate-file-link-type "floc")
+  (require 'ol-locate-file)
+#+end_src
+
+** Security
+
+The locate command is executed via ~call-process~, not a shell.  This
+avoids shell injection risks — no shell metacharacters in search strings
+are interpreted.
+
+** Dependencies
+
+- Emacs 30.1 (bundles Org 9.7+)
+- The =locate= command (or compatible, such as =plocate=) must be
+  installed on your system.
+
+* License
+
+Copyright (C) 2026 Free Software Foundation, Inc.
+
+This program is free software: you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the
+Free Software Foundation, either version 3 of the License, or (at your
+option) any later version.
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License along
+with this program.  If not, see <https://www.gnu.org/licenses/>.

@@ -171,7 +171,7 @@ emacs -Q --batch -l package-lint -f package-lint-batch-and-exit ol-locate-file.e
 
 - **Single =.el= file**: The package should be contained in a single
   =.el= file that defines all symbols and sets up the link type.
-- **README.md**: Provide a readme with usage examples, setup
+- **README.org**: Provide a readme with usage examples, setup
   instructions, and customization options.
 - **LICENSE**: Include the full GPLv3 license text.
 

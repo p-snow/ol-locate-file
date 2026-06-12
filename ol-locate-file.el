@@ -52,9 +52,10 @@
 ;; `org-locate-file-follow-auto', which supports automatic selection
 ;; (first result, most recently modified, or a custom function).
 ;;
-;; The locate command is invoked via Emacs' built-in `locate-make-command-line',
-;; so any customizations to that variable (or to `locate-command',
-;; `locate-prompt-for-command', etc.) are automatically honored.
+;; The locate command is invoked via Emacs' built-in `locate-make-command-line'
+;; by default.  The command line can be customized through the
+;; `org-locate-file-locate-args' variable, which accepts a command prefix
+;; string or a custom command builder function.
 ;;
 ;; Security: the package runs the locate command through `call-process'
 ;; rather than a shell, avoiding shell injection risks.
@@ -124,6 +125,34 @@ paths and must return a single file path string."
                  (function :tag "Custom function"))
   :group 'org-locate-file)
 
+(defcustom org-locate-file-locate-args (default-value 'locate-make-command-line)
+  "How to build the locate command line for a search pattern.
+
+When nil, delegates to `locate-make-command-line' from Emacs'
+built-in `locate.el'.
+
+When a string, it should be the locate command and any fixed
+options preceding the search pattern.  For example,
+\"locate --ignore-case\" will invoke
+\"locate --ignore-case PATTERN\" at the command line.
+
+When a list of strings, each element is a command-line argument.
+The search pattern is appended as the last element.  For example,
+\(\"locate\" \"--ignore-case\") is equivalent to the string
+\"locate --ignore-case\".
+
+When a function, it is called with the search string as the sole
+argument.  It may return:
+- A list of strings (COMMAND ARGS...), the same convention as
+  `locate-make-command-line', or
+- A string, which is split into command and arguments via
+  `split-string-and-unquote'."
+  :type '(choice (const :tag "Default (locate-make-command-line)" nil)
+                 (string :tag "Command prefix string")
+                 (repeat :tag "Command argument list" string)
+                 (function :tag "Function returning command line"))
+  :group 'org-locate-file)
+
 ;;; Internal variables
 
 (defvar org-locate-file--history nil
@@ -156,10 +185,27 @@ Returns a list of (COMMAND . ARGS) suitable for `call-process',
 where COMMAND is the absolute path to the locate executable.
 Signals `user-error' if the locate command cannot be found.
 
-Delegates to `locate-make-command-line' from Emacs' built-in
-`locate.el', which users can customize directly to control the
-locate command and its arguments."
-  (let* ((cmdline (funcall locate-make-command-line search-string))
+Uses `org-locate-file-locate-args' to determine how to build the
+command line.  See that variable for details."
+  (let* ((cmdline (cond
+                   ((null org-locate-file-locate-args)
+                    (funcall locate-make-command-line search-string))
+                   ((functionp org-locate-file-locate-args)
+                    (let ((result (funcall org-locate-file-locate-args
+                                          search-string)))
+                      (if (stringp result)
+                          (split-string-and-unquote result)
+                        result)))
+                   ((stringp org-locate-file-locate-args)
+                    (let ((parts (split-string-and-unquote
+                                  org-locate-file-locate-args)))
+                      (append parts (list search-string))))
+                   ((consp org-locate-file-locate-args)
+                    (append org-locate-file-locate-args
+                            (list search-string)))
+                   (t
+                    (user-error "Invalid value for `org-locate-file-locate-args': %S"
+                                org-locate-file-locate-args))))
          (cmd (car cmdline))
          (proc (executable-find cmd))
          (args (delq nil (cdr cmdline))))

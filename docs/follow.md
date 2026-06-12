@@ -30,12 +30,16 @@ org-locate-file--follow-impl("emacsclient::10", nil)
 org-locate-file--resolve("emacsclient")
        │
        ├── org-locate-file--run-locate("emacsclient")
-       │   │
-       │   ├── org-locate-file--build-command("emacsclient")
-       │   │   └── locate-make-command-line("emacsclient")
-       │   │       → ("locate" "--regex" "emacsclient")
-       │   │
-       │   └── call-process("locate" ... "--regex" "emacsclient")
+│   │
+        │   ├── org-locate-file--build-command("emacsclient")
+        │   │   ├── Uses org-locate-file-locate-args:
+        │   │   │   • nil         → locate-make-command-line
+        │   │   │   • string      → split prefix + ("emacsclient")
+        │   │   │   • list        → append ("emacsclient")
+        │   │   │   • function    → (funcall fn "emacsclient")
+        │   │   │       → ("locate" "--regex" "emacsclient")
+        │   │
+        │   └── call-process("locate" ... "--regex" "emacsclient")
        │       → ("/usr/bin/emacsclient", "/usr/bin/emacs", ...)
        │
        ├── Single result → return "/usr/bin/emacsclient"

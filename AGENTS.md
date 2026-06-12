@@ -255,34 +255,42 @@ controlling `lfile:` link type behavior.
 See `docs/follow.md`, `docs/store.md`, and `docs/complete.md` for
 detailed design descriptions of each handler.
 
-### 7.2 =locate-make-command-line= (Emacs Built-in)
+### 7.2 =org-locate-file-locate-args= (Custom Variable)
 
-Emacs' built-in `locate.el` provides the user option
-`locate-make-command-line`, a **function** that takes a search
-string and returns a full command list `(command args...)`.
+`ol-locate-file` provides the customizable variable
+`org-locate-file-locate-args` to control how the locate command
+line is built:
 
-`org-locate-file--build-command` always delegates to
-`locate-make-command-line` to obtain the command line:
-- It calls `(funcall locate-make-command-line search-string)`
-  to get the command and arguments.
-- It resolves the command via `executable-find` for use with
-  `call-process`.
-- It filters out `nil` elements from the argument list (to handle
-  `locate-prompt-for-command` which defaults to `nil`).
+- **Default value**: The current value of Emacs' built-in
+  `locate-make-command-line` (which is a function that takes a
+  search string and returns a command list).
+- **When nil**: Delegates directly to `locate-make-command-line`.
+- **When a string**: Used as the command prefix before the search
+  pattern.  For example, `"locate --ignore-case"` causes the
+  package to invoke `locate --ignore-case PATTERN`.
+- **When a list of strings**: Each element is a command-line
+  argument; the search pattern is appended as the last element.
+  For example, `("locate" "--ignore-case")` is equivalent
+  to the string `"locate --ignore-case"`.
+- **When a function**: Takes the search string as sole argument.
+  It may return either a command list `(COMMAND ARGS...)` (same
+  convention as `locate-make-command-line`) or a string (which is
+  then split via `split-string-and-unquote`).
 
 There are no separate `org-locate-file-command` or
 `org-locate-file-arguments` options.  Users who wish to customize
-the locate command or its arguments should customize the standard
-Emacs variables directly:
+the locate command or its arguments should customize
+`org-locate-file-locate-args` or the standard Emacs variables:
 
 - `locate-command` (default: `"locate"`)
 - `locate-make-command-line` (for full control over the command
   line construction)
 - `locate-prompt-for-command` (additional options to pass)
 
-This means users who customize `locate-make-command-line` in
-their init files will have those customizations automatically
-honored by `ol-locate-file`.
+Users who customize `locate-make-command-line` in their init files
+will have those customizations automatically reflected in the
+default value of `org-locate-file-locate-args` (via
+`default-value`).
 
 There is **no** `locate-db` variable in Emacs' built-in
 `locate.el`.  Database selection is handled by the locate command
@@ -294,6 +302,10 @@ itself or by `locate-make-command-line`.
   command execution — never =shell-command= with user-supplied input.
 - The locate search string is passed as a direct argument to
   =call-process=, which bypasses shell interpretation entirely.
+
+### 7.4 Session Files
+
+- The default output directory for session files is =sessions/=.
 
 ---
 

@@ -39,9 +39,9 @@
 ;; The package opens the resolved file as if it were a regular
 ;; `file:' link.  Three variants are provided:
 ;;
-;;   - lfile:        → equivalent to file:        (find-file)
-;;   - lfile+emacs:  → equivalent to file+emacs:  (find-file in Emacs)
-;;   - lfile+sys:    → equivalent to file+sys:    (open with system app)
+;;   - lfile:        => equivalent to file:        (find-file)
+;;   - lfile+emacs:  => equivalent to file+emacs:  (find-file in Emacs)
+;;   - lfile+sys:    => equivalent to file+sys:    (open with system app)
 ;;
 ;; The link type name (default "lfile") is customizable via
 ;; `org-locate-file-link-type'.
@@ -373,9 +373,9 @@ suffix.  The search option is preserved and passed through to
 
 IN-EMACS is passed directly to `org-link-open-as-file' and
 controls how the file is opened:
-- nil       → use `org-file-apps' to decide
-- `emacs'   → always open in Emacs
-- `system'  → always open with system application"
+- nil       => use `org-file-apps' to decide
+- `emacs'   => always open in Emacs
+- `system'  => always open with system application"
   (let* ((search-option (and (string-match "::\\(.*\\)\\'" path)
                              (match-string 1 path)))
          (search-string (if search-option

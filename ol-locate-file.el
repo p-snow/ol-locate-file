@@ -46,11 +46,11 @@
 ;; The link type name (default "lfile") is customizable via
 ;; `org-locate-file-link-type'.
 ;;
-;; When multiple files match the search substring, the user is
-;; prompted with `completing-read' to select the intended target.
-;; This behavior can be customized via
-;; `org-locate-file-follow-auto', which supports automatic selection
-;; (first result, most recently modified, or a custom function).
+;; When multiple files match the search substring, resolution follows
+;; `org-locate-file-resolve-method', which may automatically pick the
+;; first result, the most recently modified file, prompt the user, or
+;; use a custom function.  Different methods can be specified for
+;; follow vs. export (default: ask on follow, auto on export).
 ;;
 ;; The locate command is invoked via Emacs' built-in `locate-make-command-line'
 ;; by default.  The command line can be customized through the
@@ -110,24 +110,34 @@ links for existing Org documents can set this to nil."
   :type 'boolean
   :group 'org-locate-file)
 
-(defcustom org-locate-file-follow-auto nil
-  "How to automatically select a candidate when multiple files match.
+(defcustom org-locate-file-resolve-method '((follow ask) (export auto))
+  "How to resolve when multiple locate results match.
 
-When nil (the default), the user is prompted to choose from the
-matching candidates via `completing-read'.
+A flat value applies to both follow and export:
+- `auto'   -- use the first locate result without confirmation.
+- `recent' -- select the most recently modified file.
+- `ask'    -- prompt the user via `completing-read'.
+- A function -- called with candidate list, returns a file path.
 
-When t, the first candidate from locate output is used without
-confirmation.
+An alist specifies different methods per context:
+  ((follow METHOD) (export METHOD))
+where METHOD is one of the values above.  Any missing context
+falls back to `auto'.  Unrecognized values also fall back to
+`auto'.
 
-When the symbol `recent', the candidate with the most recent
-modification time is selected among the matching files.
-
-When a function, it is called with the list of candidate file
-paths and must return a single file path string."
-  :type '(choice (const :tag "Prompt user" nil)
-                 (const :tag "First result" t)
-                 (const :tag "Most recently modified" recent)
-                 (function :tag "Custom function"))
+The default uses `ask' for follow (prompt the user) and `auto'
+for export (first result, no prompting)."
+  :type '(choice
+          (const :tag "First result" auto)
+          (const :tag "Most recently modified" recent)
+          (const :tag "Prompt user" ask)
+          (function :tag "Custom function")
+          (repeat :tag "Context-specific alist"
+                  (list (choice (const follow) (const export))
+                        (choice (const :tag "First result" auto)
+                                (const :tag "Most recently modified" recent)
+                                (const :tag "Prompt user" ask)
+                                (function :tag "Custom function")))))
   :group 'org-locate-file)
 
 (defcustom org-locate-file-locate-args (default-value 'locate-make-command-line)
@@ -285,23 +295,37 @@ the first candidate."
                             (time-less-p (cdr b) (cdr a)))))
       (car candidates))))
 
-(defun org-locate-file--resolve (search-string)
+(defun org-locate-file--resolve-method (&optional context)
+  "Return the effective resolve method for CONTEXT.
+CONTEXT is `follow', `export', or nil.  When
+`org-locate-file-resolve-method' is an alist, look up CONTEXT;
+otherwise return the value directly.  Falls back to `auto' when
+the alist has no entry for CONTEXT or the value is unrecognized."
+  (let ((value org-locate-file-resolve-method))
+    (if (and (consp value) (assq (or context 'follow) value))
+         (let ((method (cadr (assq (or context 'follow) value))))
+          (if (memq method '(auto recent ask))
+              method
+            (if (functionp method) method 'auto)))
+      (if (memq value '(auto recent ask))
+          value
+        (if (functionp value) value 'auto)))))
+
+(defun org-locate-file--resolve (search-string &optional context)
   "Resolve SEARCH-STRING to a single file path using locate.
-When multiple files match and `org-locate-file-follow-auto' is
-nil, prompt the user via `completing-read'.  Otherwise, select
-automatically based on the value of that variable.
-When exactly one matches, return it directly."
-  (let ((candidates (org-locate-file--run-locate search-string)))
+CONTEXT is `follow' or `export', used when
+`org-locate-file-resolve-method' is an alist.
+When exactly one candidate matches, return it directly."
+  (let* ((method (org-locate-file--resolve-method context))
+         (candidates (org-locate-file--run-locate search-string)))
     (if (null (cdr candidates))
         (car candidates)
-      (pcase org-locate-file-follow-auto
+      (pcase method
         ((pred functionp)
-         (funcall org-locate-file-follow-auto candidates))
+         (funcall method candidates))
         ('recent
          (org-locate-file--pick-recent candidates))
-        ((pred identity)
-         (car candidates))
-        (_
+        ('ask
          (let ((choice
                 (completing-read
                  (format "Multiple matches for \"%s\" (choose one): "
@@ -315,7 +339,9 @@ When exactly one matches, return it directly."
                  nil t nil 'org-locate-file--history)))
            (if (string-empty-p choice)
                (user-error "No file selected")
-             choice)))))))
+             choice)))
+        (_
+         (car candidates))))))
 
 ;;; Follow handlers
 
@@ -352,7 +378,7 @@ controls how the file is opened:
          (search-string (if search-option
                             (substring path 0 (match-beginning 0))
                           path))
-         (resolved (org-locate-file--resolve search-string))
+         (resolved (org-locate-file--resolve search-string 'follow))
          (full-path (if search-option
                         (concat resolved "::" search-option)
                       resolved)))
@@ -368,11 +394,11 @@ PATH is the link path, which may include a \"::search-option\"
 suffix.  DESC is the description text or nil.  BACKEND is the
 export backend symbol.  INFO is the communication channel plist.
 
-When multiple files match, the first result is used automatically
-\(without prompting) by binding `org-locate-file-follow-auto' to t
-during resolution.  The resolved path is wrapped in a `file:' link
-and transcoded via `org-export-data-with-backend', so each backend
-applies its native file-link formatting.
+When multiple files match, resolution follows
+`org-locate-file-resolve-method' with context `export' (default:
+auto, first result without prompting).  The resolved path is wrapped
+in a `file:' link and transcoded via `org-export-data-with-backend',
+so each backend applies its native file-link formatting.
 
 Signals `user-error' when resolution fails; the original PATH is
 returned as a fallback file URI."
@@ -382,9 +408,7 @@ returned as a fallback file URI."
                             (substring path 0 (match-beginning 0))
                           path)))
     (condition-case nil
-        (let* ((resolved (let ((org-locate-file-follow-auto
-                                (or org-locate-file-follow-auto t)))
-                           (org-locate-file--resolve search-string)))
+        (let* ((resolved (org-locate-file--resolve search-string 'export))
                (full-path (if search-option
                               (concat resolved "::" search-option)
                             resolved))

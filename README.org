@@ -71,7 +71,7 @@ absolute file path, and opens it as if it were a regular =file:= link.
 
 If multiple files match, you are prompted to choose via
 ~completing-read~.  This behavior can be customized — see
-~org-locate-file-follow-auto~ below.
+~org-locate-file-resolve-method~ below.
 
 ** Store
 
@@ -122,15 +122,25 @@ issues when the search substring is very short and matches many files.
 When non-nil, ~org-store-link~ stores an =lfile:= link.  When nil, the
 handler does nothing, allowing the default =file:= link storage.
 
-** ~org-locate-file-follow-auto~
+** ~org-locate-file-resolve-method~
 
-Controls automatic candidate selection when multiple files match:
+Controls how files are resolved when multiple locate results match.
 
-- ~nil~ (default): prompt the user via ~completing-read~
-- ~t~: use the first result without confirmation
-- ~'recent~: select the most recently modified file
-- ~function~: a custom function receiving the candidate list and
-  returning a single path
+A flat value applies to both follow and export:
+
+- ~auto~ (default for export): use the first locate result without confirmation
+- ~recent~: select the most recently modified file
+- ~ask~ (default for follow): prompt the user via ~completing-read~
+- ~function~: a custom function receiving the candidate list and returning a single path
+
+An alist specifies different methods per context:
+
+#+begin_example
+  ((follow ask) (export auto))
+#+end_example
+
+This is the default: follow prompts the user, export auto-selects
+the first result.
 
 ** ~org-locate-file-locate-args~
 

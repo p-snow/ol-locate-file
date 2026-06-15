@@ -81,6 +81,16 @@ When exactly one matches, return it directly."
 - Keep lines to 80 characters or fewer where practical.
 - Docstrings, in particular, should wrap at 72–80 columns.
 
+### 1.7 Character Encoding
+
+- **Never** use non-ASCII characters (e.g., →, ←, ⇒, •, ✓, —, etc.) in
+  source code, including docstrings, comments, and string literals.
+  Use ASCII equivalents instead (e.g., `->`, `<-`, `=>`, `*`, `v`,
+  `--`, etc.).
+- In user-facing documentation (`README.org`, `docs/` files), prefer
+  ASCII equivalents as well.  Avoid non-ASCII characters unless there
+  is a strong technical or formatting reason to use them.
+
 ---
 
 ## 2. MELPA Submission Requirements

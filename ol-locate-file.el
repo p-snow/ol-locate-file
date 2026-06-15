@@ -181,19 +181,22 @@ argument.  It may return:
  :follow #'org-locate-file--follow
  :store #'org-locate-file-store-link
  :complete #'org-locate-file-complete-link
- :export #'org-locate-file--export)
+ :export #'org-locate-file--export
+ :preview #'org-locate-file--preview)
 ;; Register lfile+emacs variant
 (org-link-set-parameters
  (concat org-locate-file-link-type "+emacs")
  :follow #'org-locate-file--follow-emacs
  :store #'org-locate-file-store-link
- :export #'org-locate-file--export)
+ :export #'org-locate-file--export
+ :preview #'org-locate-file--preview)
 ;; Register lfile+sys variant
 (org-link-set-parameters
  (concat org-locate-file-link-type "+sys")
  :follow #'org-locate-file--follow-sys
  :store #'org-locate-file-store-link
- :export #'org-locate-file--export)
+ :export #'org-locate-file--export
+ :preview #'org-locate-file--preview)
 
 ;;; Command construction
 
@@ -419,6 +422,26 @@ returned as a fallback file URI."
             (org-element-adopt link desc))
           (org-export-data-with-backend link backend info))
       (user-error (org-export-file-uri path)))))
+
+;;; Preview handler
+
+(defun org-locate-file--preview (ov path link)
+  "Preview an lfile: link image in overlay OV.
+PATH is the link path (a locate substring) which may include a
+\"::search-option\" suffix.  LINK is the Org element.
+
+Resolves PATH via locate and delegates to `org-link-preview-file'.
+Returns non-nil when a preview is displayed, nil otherwise."
+  (condition-case nil
+      (let* ((search-option (and (string-match "::\\(.*\\)\\'" path)
+                                 (match-string 1 path)))
+             (search-string (if search-option
+                                (substring path 0 (match-beginning 0))
+                              path))
+             (resolved (let ((org-locate-file-resolve-method 'auto))
+                         (org-locate-file--resolve search-string))))
+        (org-link-preview-file ov resolved link))
+    (user-error nil)))
 
 ;;; Store handler
 

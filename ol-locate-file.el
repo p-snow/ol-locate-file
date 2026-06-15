@@ -67,6 +67,11 @@
 (require 'cl-lib)
 (require 'locate)
 
+(declare-function org-export-file-uri "ox" (filename))
+(declare-function org-export-data-with-backend "ox" (data backend info))
+(declare-function org-element-create "org-element-ast" (type &optional props &rest children))
+(declare-function org-element-adopt "org-element-ast" (parent &rest children))
+
 ;;; Customization group
 
 (defgroup org-locate-file nil
@@ -165,17 +170,20 @@ argument.  It may return:
  org-locate-file-link-type
  :follow #'org-locate-file--follow
  :store #'org-locate-file-store-link
- :complete #'org-locate-file-complete-link)
+ :complete #'org-locate-file-complete-link
+ :export #'org-locate-file--export)
 ;; Register lfile+emacs variant
 (org-link-set-parameters
  (concat org-locate-file-link-type "+emacs")
  :follow #'org-locate-file--follow-emacs
- :store #'org-locate-file-store-link)
+ :store #'org-locate-file-store-link
+ :export #'org-locate-file--export)
 ;; Register lfile+sys variant
 (org-link-set-parameters
  (concat org-locate-file-link-type "+sys")
  :follow #'org-locate-file--follow-sys
- :store #'org-locate-file-store-link)
+ :store #'org-locate-file-store-link
+ :export #'org-locate-file--export)
 
 ;;; Command construction
 
@@ -349,6 +357,44 @@ controls how the file is opened:
                         (concat resolved "::" search-option)
                       resolved)))
     (org-link-open-as-file full-path in-emacs)))
+
+;;; Export handler
+
+(defun org-locate-file--export (path desc backend info)
+  "Export an lfile: link.
+
+Resolve PATH via locate and delegate export to the file: link type.
+PATH is the link path, which may include a \"::search-option\"
+suffix.  DESC is the description text or nil.  BACKEND is the
+export backend symbol.  INFO is the communication channel plist.
+
+When multiple files match, the first result is used automatically
+\(without prompting) by binding `org-locate-file-follow-auto' to t
+during resolution.  The resolved path is wrapped in a `file:' link
+and transcoded via `org-export-data-with-backend', so each backend
+applies its native file-link formatting.
+
+Signals `user-error' when resolution fails; the original PATH is
+returned as a fallback file URI."
+  (let* ((search-option (and (string-match "::\\(.*\\)\\'" path)
+                             (match-string 1 path)))
+         (search-string (if search-option
+                            (substring path 0 (match-beginning 0))
+                          path)))
+    (condition-case nil
+        (let* ((resolved (let ((org-locate-file-follow-auto
+                                (or org-locate-file-follow-auto t)))
+                           (org-locate-file--resolve search-string)))
+               (full-path (if search-option
+                              (concat resolved "::" search-option)
+                            resolved))
+               (link (org-element-create
+                      'link
+                      (list :type "file" :path full-path :format 'plain))))
+          (when (org-string-nw-p desc)
+            (org-element-adopt link desc))
+          (org-export-data-with-backend link backend info))
+      (user-error (org-export-file-uri path)))))
 
 ;;; Store handler
 

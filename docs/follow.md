@@ -41,13 +41,13 @@ org-locate-file--resolve("emacsclient")
         │   │
         │   └── call-process("locate" ... "--regex" "emacsclient")
        │       → ("/usr/bin/emacsclient", "/usr/bin/emacs", ...)
-       │
-       ├── Single result → return "/usr/bin/emacsclient"
-       └── Multiple results:
-            ├── org-locate-file-follow-auto = nil  → completing-read
-            ├── org-locate-file-follow-auto = t    → first result
-            ├── org-locate-file-follow-auto = 'recent → most recent mtime
-            └── org-locate-file-follow-auto = fn   → (funcall fn candidates)
+        │
+        ├── Single result → return "/usr/bin/emacsclient"
+        └── Multiple results (context = follow):
+             ├── org-locate-file-resolve-method = auto  → first result
+             ├── org-locate-file-resolve-method = recent → most recent mtime
+             ├── org-locate-file-resolve-method = ask   → completing-read
+             └── org-locate-file-resolve-method = fn    → (funcall fn candidates)
        │
        ▼
 org-link-open-as-file("/usr/bin/emacsclient::10", nil)
@@ -70,6 +70,7 @@ org-link-open-as-file("/usr/bin/emacsclient::10", nil)
 - Each variant is registered as a separate link type (not as a
   parameter on a single type), which is required for Org to dispatch
   the correct follow function based on the link prefix.
-- `org-locate-file-follow-auto` controls automatic candidate selection
-  when multiple files match.  See the docstring of that variable for
-  details on the possible values.
+- `org-locate-file-resolve-method` controls how candidates are selected
+  when multiple files match.  See that variable's docstring for details.
+  Follow uses the `follow` context (default: `ask`), export uses
+  the `export` context (default: `auto`).

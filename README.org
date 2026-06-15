@@ -73,6 +73,18 @@ If multiple files match, you are prompted to choose via
 ~completing-read~.  This behavior can be customized — see
 ~org-locate-file-resolve-method~ below.
 
+** Export
+
+When exporting an Org document containing =lfile:= links (e.g. to
+HTML or LaTeX), the package resolves each link to a full file path
+and delegates to the standard =file:= link export handler.  This
+means each backend applies its native file-link formatting (e.g. a
+clickable link in HTML).
+
+If multiple files match, the first locate result is used
+automatically without prompting (customizable via
+~org-locate-file-resolve-method~).
+
 ** Store
 
 When you invoke ~org-store-link~ (~C-c l~) in a file-visiting buffer or

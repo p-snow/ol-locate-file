@@ -11,7 +11,7 @@ ALL_TEST_FILES = $(UNIT_TEST_FILES) $(INTEGRATION_TEST_FILES)
 
 # Guix container for integration tests
 GUIX_CONTAINER = guix shell --container --share=$(CURDIR)
-GUIX_PACKAGES  = bash coreutils mlocate emacs-minimal
+GUIX_PACKAGES  = bash coreutils findutils mlocate emacs-minimal
 
 # ERT runner with testcover instrumentation for coverage
 define run-ert

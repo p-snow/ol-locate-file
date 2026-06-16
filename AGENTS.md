@@ -319,7 +319,92 @@ itself or by `locate-make-command-line`.
 
 ---
 
-## 8. References
+## 8. Testing
+
+### 8.1 Test Framework Overview
+
+- **Framework**: ERT (built-in) for test execution, testcover for
+  code path coverage.
+- **Location**: All test files go under `tests/`.
+- **Runner**: `make unit-test` for unit tests; `make test` runs all
+  tests (unit + future integration).
+- **Coverage**: Test files are instrumented by testcover before
+  execution.  A coverage report showing code-path coverage
+  percentage for all `org-locate-file-*` functions is printed after
+  test results.
+
+### 8.2 File Conventions
+
+- **Test helper** (`tests/ol-locate-file-test.el`): Shared utility
+  code, coverage reporting, and the `org-locate-file-test-run-all`
+  entry point.  All test files should `(require 'ol-locate-file-test)`
+  or be loaded alongside it.
+- **Unit tests** (`tests/ol-locate-file-unit-test.el`): Pure unit
+  tests with no external dependencies.  Name pattern:
+  `ol-locate-file-unit-test.el`.
+- **Future integration tests** (`tests/ol-locate-file-integration-test.el`):
+  Use the same naming convention.  Add to `ALL_TEST_FILES` in the
+  Makefile.
+
+### 8.3 Test Data Strategy
+
+- **Ad-hoc, no external files**: Tests should create all necessary
+  data inline using `let` bindings to override customizable
+  variables.  Mock functions are defined as local lambdas within
+  test bodies.
+- **No filesystem dependencies**: Avoid creating temporary files
+  or directories.  If unavoidable, use `temporary-file-directory`.
+
+### 8.4 Test Outline Convention
+
+Every test scenario uses a three-level outline via Elisp comment
+lines, supporting `outline-minor-mode` navigation:
+
+```
+;;; Function category               (level-3 heading, outline heading)
+;;;; Scenario group                  (level-4 heading)
+;;;;; One-line scenario description  (level-5 heading)
+```
+
+- `;;;` — Groups tests for a single function (e.g. `;;; org-locate-file--resolve-method`).
+- `;;;;` — Groups scenarios by behavior category (e.g. `;;;; Flat value resolution`).
+- `;;;;;` — A single test scenario, followed immediately by its
+  `ert-deftest` form.  The comment should be a complete one-line
+  description of what the test verifies.
+
+### 8.5 Test Naming
+
+ERT test names follow this pattern:
+
+```
+org-locate-file-test/FUNCTION-NAME/SCENARIO-KEY
+```
+
+Examples:
+- `org-locate-file-test/resolve-method/flat-auto`
+- `org-locate-file-test/resolve-method/alist-missing-context`
+- `org-locate-file-test/resolve-method/unrecognized-flat`
+
+### 8.6 Adding a New Unit Test File
+
+1. Create `tests/ol-locate-file-unit-test-TOPIC.el`.
+2. Add `(require 'ert)` and `(require 'ol-locate-file)` at the top.
+3. Use the outline convention (8.4) and naming convention (8.5).
+4. Add the file to `UNIT_TEST_FILES` in the Makefile.
+5. Run `make unit-test` to verify.
+
+### 8.7 Running Tests
+
+```bash
+make unit-test   # Unit tests only
+make test        # All tests (unit + integration)
+```
+
+Exit code is non-zero when any test fails.
+
+---
+
+## 9. References
 
 - [Org Mode Manual: Adding Hyperlink Types](https://orgmode.org/manual/Adding-Hyperlink-Types.html)
 - [GNU Emacs Manual: locate.el](https://www.gnu.org/software/emacs/manual/html_node/emacs/Dired-and-Find.html)

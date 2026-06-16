@@ -142,6 +142,338 @@ method value is an unrecognized symbol,
   (let ((org-locate-file-resolve-method '((follow invalid))))
     (should (eq (org-locate-file--resolve-method 'follow) 'auto))))
 
+;;; org-locate-file--build-command
+
+;;;; Nil delegates to locate-make-command-line
+(ert-deftest org-locate-file-test/build-command/nil-delegates ()
+  "When `org-locate-file-locate-args' is nil,
+`org-locate-file--build-command' calls `locate-make-command-line'
+and prepends the resolved locate executable path."
+  (cl-letf (((symbol-function 'executable-find)
+             (lambda (_cmd) "/fake/locate"))
+            ((symbol-function 'locate-make-command-line)
+             (lambda (s) (list "locate" s))))
+    (let ((org-locate-file-locate-args nil))
+      (should (equal (org-locate-file--build-command "foo")
+                     '("/fake/locate" "foo"))))))
+
+;;;; String value splits and appends search-string
+(ert-deftest org-locate-file-test/build-command/string-value ()
+  "When `org-locate-file-locate-args' is a string, it is split
+into command and arguments, and SEARCH-STRING is appended."
+  (cl-letf (((symbol-function 'executable-find)
+             (lambda (_cmd) "/fake/locate")))
+    (let ((org-locate-file-locate-args "locate --ignore-case"))
+      (should (equal (org-locate-file--build-command "foo")
+                     '("/fake/locate" "--ignore-case" "foo"))))))
+
+;;;; List value appends search-string
+(ert-deftest org-locate-file-test/build-command/list-value ()
+  "When `org-locate-file-locate-args' is a list of strings,
+SEARCH-STRING is appended as the last element."
+  (cl-letf (((symbol-function 'executable-find)
+             (lambda (_cmd) "/fake/locate")))
+    (let ((org-locate-file-locate-args '("locate" "--ignore-case")))
+      (should (equal (org-locate-file--build-command "foo")
+                     '("/fake/locate" "--ignore-case" "foo"))))))
+
+;;;; Function returning string splits result
+(ert-deftest org-locate-file-test/build-command/fn-returns-string ()
+  "When `org-locate-file-locate-args' is a function that returns
+a string, the result is split via `split-string-and-unquote'."
+  (cl-letf (((symbol-function 'executable-find)
+             (lambda (_cmd) "/fake/locate")))
+    (let ((org-locate-file-locate-args
+           (lambda (s) (format "locate -d /db %s" s))))
+      (should (equal (org-locate-file--build-command "foo")
+                     '("/fake/locate" "-d" "/db" "foo"))))))
+
+;;;; Function returning list used directly
+(ert-deftest org-locate-file-test/build-command/fn-returns-list ()
+  "When `org-locate-file-locate-args' is a function that returns
+a list, the list is used directly as the command line."
+  (cl-letf (((symbol-function 'executable-find)
+             (lambda (_cmd) "/fake/locate")))
+    (let ((org-locate-file-locate-args
+           (lambda (s) (list "locate" "-d" "/db" s))))
+      (should (equal (org-locate-file--build-command "foo")
+                     '("/fake/locate" "-d" "/db" "foo"))))))
+
+;;;; Executable-find failure signals user-error
+(ert-deftest org-locate-file-test/build-command/no-executable ()
+  "When `executable-find' returns nil for the locate command,
+`org-locate-file--build-command' signals a `user-error'."
+  (cl-letf (((symbol-function 'executable-find)
+             (lambda (_cmd) nil))
+            ((symbol-function 'locate-make-command-line)
+             (lambda (s) (list "locate" s))))
+    (let ((org-locate-file-locate-args nil))
+      (should-error (org-locate-file--build-command "foo")))))
+
+;;;; Invalid value type signals user-error
+(ert-deftest org-locate-file-test/build-command/invalid-type ()
+  "When `org-locate-file-locate-args' is an unsupported type
+(e.g. an integer), `org-locate-file--build-command' signals a
+`user-error'."
+  (let ((org-locate-file-locate-args 42))
+    (should-error (org-locate-file--build-command "foo")
+                  :type 'user-error)))
+
+;;; org-locate-file--pick-recent
+
+;;;;; Pick newer file from two
+(ert-deftest org-locate-file-test/pick-recent/two-files ()
+  "Given two temp files with different modification times,
+`org-locate-file--pick-recent' returns the newer one."
+  (let* ((old-file (make-temp-file "ol-locate-old-"))
+         (new-file (make-temp-file "ol-locate-new-")))
+    (unwind-protect
+        (progn
+          (set-file-times old-file (encode-time 0 0 0 1 1 2020))
+          (set-file-times new-file (encode-time 0 0 0 1 1 2024))
+          (should (equal (org-locate-file--pick-recent
+                          (list old-file new-file))
+                         new-file)))
+      (ignore-errors (delete-file old-file))
+      (ignore-errors (delete-file new-file)))))
+
+;;;;; Pick newest from three files
+(ert-deftest org-locate-file-test/pick-recent/three-files ()
+  "Given three temp files, `org-locate-file--pick-recent' returns
+the most recently modified one."
+  (let* ((old-file (make-temp-file "ol-locate-old-"))
+         (mid-file (make-temp-file "ol-locate-mid-"))
+         (new-file (make-temp-file "ol-locate-new-")))
+    (unwind-protect
+        (progn
+          (set-file-times old-file (encode-time 0 0 0 1 1 2020))
+          (set-file-times mid-file (encode-time 0 0 0 6 1 2022))
+          (set-file-times new-file (encode-time 0 0 0 1 1 2024))
+          (should (equal (org-locate-file--pick-recent
+                          (list old-file mid-file new-file))
+                         new-file)))
+      (ignore-errors (delete-file old-file))
+      (ignore-errors (delete-file mid-file))
+      (ignore-errors (delete-file new-file)))))
+
+;;;;; Fallback to first when file-attributes returns nil
+(ert-deftest org-locate-file-test/pick-recent/fallback-nil-attrs ()
+  "When all `file-attributes' calls return nil,
+`org-locate-file--pick-recent' falls back to the first candidate."
+  (let* ((a "/nonexistent/a")
+         (b "/nonexistent/b"))
+    (should (equal (org-locate-file--pick-recent (list a b)) a))))
+
+;;;;; Single file returns that file
+(ert-deftest org-locate-file-test/pick-recent/single-file ()
+  "Given a single candidate, `org-locate-file--pick-recent'
+returns it directly."
+  (let* ((f (make-temp-file "ol-locate-single-")))
+    (unwind-protect
+        (should (equal (org-locate-file--pick-recent (list f)) f))
+      (ignore-errors (delete-file f)))))
+
+;;;;; Equal timestamps returns first candidate
+(ert-deftest org-locate-file-test/pick-recent/equal-timestamps ()
+  "When two files have the same modification time,
+`org-locate-file--pick-recent' returns the first candidate."
+  (let* ((a (make-temp-file "ol-locate-eq-a-"))
+         (b (make-temp-file "ol-locate-eq-b-"))
+         (same-time (encode-time 0 0 12 15 6 2025)))
+    (unwind-protect
+        (progn
+          (set-file-times a same-time)
+          (set-file-times b same-time)
+          (should (equal (org-locate-file--pick-recent (list a b)) a)))
+      (ignore-errors (delete-file a))
+      (ignore-errors (delete-file b)))))
+
+;;; org-locate-file--resolve
+
+;;;;; Single candidate returns it directly (auto method)
+(ert-deftest org-locate-file-test/resolve/single-candidate-auto ()
+  "When only one candidate matches, return it directly regardless
+of the resolve method being `auto'."
+  (cl-letf (((symbol-function 'org-locate-file--run-locate)
+             (lambda (_s) (list "/usr/bin/emacs"))))
+    (let ((org-locate-file-resolve-method 'auto))
+      (should (equal (org-locate-file--resolve "emacs" 'follow)
+                     "/usr/bin/emacs")))))
+
+;;;;; Single candidate returns it directly (ask method)
+(ert-deftest org-locate-file-test/resolve/single-candidate-ask ()
+  "When only one candidate matches, return it directly even when
+the resolve method is `ask' (no prompting needed)."
+  (cl-letf (((symbol-function 'org-locate-file--run-locate)
+             (lambda (_s) (list "/usr/bin/emacs"))))
+    (let ((org-locate-file-resolve-method 'ask))
+      (should (equal (org-locate-file--resolve "emacs" 'follow)
+                     "/usr/bin/emacs")))))
+
+;;;;; Multiple candidates with auto picks first
+(ert-deftest org-locate-file-test/resolve/multi-auto-picks-first ()
+  "When multiple candidates match and method is `auto', return the
+first candidate."
+  (cl-letf (((symbol-function 'org-locate-file--run-locate)
+             (lambda (_s) (list "/usr/bin/emacs" "/bin/emacs"))))
+    (let ((org-locate-file-resolve-method 'auto))
+      (should (equal (org-locate-file--resolve "emacs" 'follow)
+                     "/usr/bin/emacs")))))
+
+;;;;; Multiple candidates with recent method
+(ert-deftest org-locate-file-test/resolve/multi-recent ()
+  "When multiple candidates match and method is `recent', delegate
+to `org-locate-file--pick-recent'."
+  (cl-letf (((symbol-function 'org-locate-file--run-locate)
+             (lambda (_s) (list "/usr/bin/emacs" "/bin/emacs")))
+            ((symbol-function 'org-locate-file--pick-recent)
+             (lambda (candidates) (cadr candidates))))
+    (let ((org-locate-file-resolve-method 'recent))
+      (should (equal (org-locate-file--resolve "emacs" 'follow)
+                     "/bin/emacs")))))
+
+;;;;; Multiple candidates with custom function
+(ert-deftest org-locate-file-test/resolve/multi-custom-function ()
+  "When multiple candidates match and method is a function, call
+it with the candidates list and return its result."
+  (cl-letf (((symbol-function 'org-locate-file--run-locate)
+             (lambda (_s) (list "/usr/bin/emacs" "/bin/emacs"))))
+    (let* ((my-fn (lambda (candidates) (car (last candidates))))
+           (org-locate-file-resolve-method my-fn))
+      (should (equal (org-locate-file--resolve "emacs" 'follow)
+                     "/bin/emacs")))))
+
+;;;;; Multiple candidates with ask prompts user
+(ert-deftest org-locate-file-test/resolve/multi-ask-prompts ()
+  "When multiple candidates match and method is `ask', prompt via
+`completing-read' and return the user's choice."
+  (cl-letf (((symbol-function 'org-locate-file--run-locate)
+             (lambda (_s) (list "/usr/bin/emacs" "/bin/emacs")))
+            ((symbol-function 'completing-read)
+             (lambda (&rest _) "/usr/bin/emacs")))
+    (let ((org-locate-file-resolve-method 'ask))
+      (should (equal (org-locate-file--resolve "emacs" 'follow)
+                     "/usr/bin/emacs")))))
+
+;;; org-locate-file--shortest-unique-suffix
+
+;;;;; Single file match returns basename
+(ert-deftest org-locate-file-test/shortest-unique-suffix/single-match ()
+  "When the locate database has exactly one result matching the
+basename, return just the basename."
+  (cl-letf (((symbol-function 'org-locate-file--run-locate)
+             (lambda (_s) (list "/usr/bin/emacsclient"))))
+    (should (equal (org-locate-file--shortest-unique-suffix
+                    "/usr/bin/emacsclient")
+                   "emacsclient"))))
+
+;;;;; Unique suffix after one directory level
+(ert-deftest org-locate-file-test/shortest-unique-suffix/one-dir-level ()
+  "When multiple files share a basename and one directory level
+is enough to disambiguate, return that two-component suffix."
+  (cl-letf (((symbol-function 'org-locate-file--run-locate)
+             (lambda (_s)
+               (list "/usr/bin/emacsclient"
+                     "/usr/local/bin/emacsclient"))))
+    (should (equal (org-locate-file--shortest-unique-suffix
+                    "/usr/bin/emacsclient")
+                   "usr/bin/emacsclient"))))
+
+;;;;; Unique suffix after multiple directory levels
+(ert-deftest org-locate-file-test/shortest-unique-suffix/multi-dir-level ()
+  "When one directory level is insufficient, keep prepending until
+the suffix is unique."
+  (cl-letf (((symbol-function 'org-locate-file--run-locate)
+             (lambda (_s)
+               (list "/home/user/proj/src/main.el"
+                     "/home/user/other/src/main.el"))))
+    (should (equal (org-locate-file--shortest-unique-suffix
+                    "/home/user/proj/src/main.el")
+                   "proj/src/main.el"))))
+
+;;;;; File not found in results returns nil
+(ert-deftest org-locate-file-test/shortest-unique-suffix/not-in-results ()
+  "When FILE-PATH is not among the locate results, return nil."
+  (cl-letf (((symbol-function 'org-locate-file--run-locate)
+             (lambda (_s)
+               (list "/usr/bin/emacs" "/bin/emacs"))))
+    (should (null (org-locate-file--shortest-unique-suffix
+                   "/usr/bin/nano")))))
+
+;;;;; File not in locate database (user-error) returns nil
+(ert-deftest org-locate-file-test/shortest-unique-suffix/not-in-db ()
+  "When `org-locate-file--run-locate' signals `user-error', the
+condition-case handler returns nil."
+  (cl-letf (((symbol-function 'org-locate-file--run-locate)
+             (lambda (_s) (user-error "No matches"))))
+    (should (null (org-locate-file--shortest-unique-suffix
+                   "/usr/bin/emacsclient")))))
+
+;;; org-locate-file--follow-impl
+
+;;;;; Plain path resolves and opens via org-link-open-as-file
+(ert-deftest org-locate-file-test/follow-impl/plain-path ()
+  "A plain path (no search option) resolves via locate and opens
+via `org-link-open-as-file' with IN-EMACS nil."
+  (cl-letf (((symbol-function 'org-locate-file--resolve)
+             (lambda (_s _ctx) "/real/path/emacsclient"))
+            ((symbol-function 'org-link-open-as-file)
+             (lambda (path in-emacs)
+               (list 'opened path in-emacs))))
+    (should (equal (org-locate-file--follow-impl
+                    "emacsclient" nil)
+                   '(opened "/real/path/emacsclient" nil)))))
+
+;;;;; Path with linenum option preserves it
+(ert-deftest org-locate-file-test/follow-impl/linenum-option ()
+  "A path with ::linenum suffix preserves the option on the
+resolved path."
+  (cl-letf (((symbol-function 'org-locate-file--resolve)
+             (lambda (_s _ctx) "/real/path/emacsclient"))
+            ((symbol-function 'org-link-open-as-file)
+             (lambda (path in-emacs)
+               (list 'opened path in-emacs))))
+    (should (equal (org-locate-file--follow-impl
+                    "emacsclient::42" nil)
+                   '(opened "/real/path/emacsclient::42" nil)))))
+
+;;;;; Path with heading option preserves it
+(ert-deftest org-locate-file-test/follow-impl/heading-option ()
+  "A path with ::*Heading suffix preserves the heading option on
+the resolved path."
+  (cl-letf (((symbol-function 'org-locate-file--resolve)
+             (lambda (_s _ctx) "/real/path/notes"))
+            ((symbol-function 'org-link-open-as-file)
+             (lambda (path in-emacs)
+               (list 'opened path in-emacs))))
+    (should (equal (org-locate-file--follow-impl
+                    "notes::*SectionOne" nil)
+                   '(opened "/real/path/notes::*SectionOne" nil)))))
+
+;;;;; IN-EMACS nil is passed through
+(ert-deftest org-locate-file-test/follow-impl/in-emacs-nil ()
+  "When IN-EMACS is nil, it is passed directly to
+`org-link-open-as-file'."
+  (cl-letf (((symbol-function 'org-locate-file--resolve)
+             (lambda (_s _ctx) "/real/path/emacsclient"))
+            ((symbol-function 'org-link-open-as-file)
+             (lambda (path in-emacs)
+               (list 'opened path in-emacs))))
+    (should (equal (org-locate-file--follow-impl "emacsclient" nil)
+                   '(opened "/real/path/emacsclient" nil)))))
+
+;;;;; IN-EMACS 'emacs is passed through
+(ert-deftest org-locate-file-test/follow-impl/in-emacs-emacs ()
+  "When IN-EMACS is `emacs', it is passed directly to
+`org-link-open-as-file'."
+  (cl-letf (((symbol-function 'org-locate-file--resolve)
+             (lambda (_s _ctx) "/real/path/emacsclient"))
+            ((symbol-function 'org-link-open-as-file)
+             (lambda (path in-emacs)
+               (list 'opened path in-emacs))))
+    (should (equal (org-locate-file--follow-impl "emacsclient" 'emacs)
+                   '(opened "/real/path/emacsclient" emacs)))))
+
 (provide 'ol-locate-file-unit-test)
 
 ;;; ol-locate-file-unit-test.el ends here

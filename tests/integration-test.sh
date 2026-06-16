@@ -40,6 +40,15 @@ touch -t 202506010000 "$TEST_DIR/tsdir/beta.rst"
 # Make sure doc/guide.txt still exists (referenced by some tests)
 echo "# old documentation" > "$TEST_DIR/doc/guide.txt"
 
+# Large DB performance test files: generate ~5000 files in a subdirectory.
+# These files are used by the large DB performance tests to verify that
+# locate remains responsive with many indexed files.
+PERF_DIR="$TEST_DIR/perf"
+mkdir -p "$PERF_DIR"
+for i in $(seq 1 5000); do
+    printf "performance test file %04d\n" "$i" > "$PERF_DIR/file_$(printf '%04d' "$i").dat"
+done
+
 # Build locate database for the test directory.
 # -l 0 disables security checks so all files are indexed regardless of
 # permissions, which is necessary inside the container.
@@ -47,6 +56,7 @@ updatedb -l 0 -o "$DB_PATH" -U "$TEST_DIR"
 
 # Run integration tests via Emacs batch
 OC_LOCATE_TEST_DB="$DB_PATH" \
+OC_LOCATE_TEST_DIR="$TEST_DIR" \
 emacs -Q --batch -L . \
   -l tests/ol-locate-file-test.el \
   -l tests/ol-locate-file-integration-test.el \

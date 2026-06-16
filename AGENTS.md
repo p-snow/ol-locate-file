@@ -326,12 +326,12 @@ itself or by `locate-make-command-line`.
 - **Framework**: ERT (built-in) for test execution, testcover for
   code path coverage.
 - **Location**: All test files go under `tests/`.
-- **Runner**: `make unit-test` for unit tests; `make test` runs all
-  tests (unit + future integration).
-- **Coverage**: Test files are instrumented by testcover before
-  execution.  A coverage report showing code-path coverage
-  percentage for all `org-locate-file-*` functions is printed after
-  test results.
+- **Runner**: `make unit-test` for unit tests; `make integration-test`
+  for integration tests; `make test` runs all.
+- **Coverage**: Unit test files are instrumented by testcover before
+  execution (integration tests skip coverage instrumentation).
+  A coverage report showing code-path coverage percentage for all
+  `org-locate-file-*` functions is printed after unit test results.
 
 ### 8.2 File Conventions
 
@@ -342,20 +342,51 @@ itself or by `locate-make-command-line`.
 - **Unit tests** (`tests/ol-locate-file-unit-test.el`): Pure unit
   tests with no external dependencies.  Name pattern:
   `ol-locate-file-unit-test.el`.
-- **Future integration tests** (`tests/ol-locate-file-integration-test.el`):
-  Use the same naming convention.  Add to `ALL_TEST_FILES` in the
-  Makefile.
+- **Integration tests** (`tests/ol-locate-file-integration-test.el`):
+  Tests that exercise the actual `locate` command inside a Guix
+  container.  Name pattern: `ol-locate-file-integration-test.el`.
+- **Integration runner** (`tests/integration-test.sh`): Shell script
+  that sets up the test environment inside the container (creates
+  test files, builds locate DB, launches Emacs batch, cleans up).
 
 ### 8.3 Test Data Strategy
 
-- **Ad-hoc, no external files**: Tests should create all necessary
-  data inline using `let` bindings to override customizable
-  variables.  Mock functions are defined as local lambdas within
-  test bodies.
-- **No filesystem dependencies**: Avoid creating temporary files
-  or directories.  If unavoidable, use `temporary-file-directory`.
+- **Ad-hoc, no external files**: Unit tests should create all
+  necessary data inline using `let` bindings to override
+  customizable variables.  Mock functions are defined as local
+  lambdas within test bodies.
+- **No filesystem dependencies**: Unit tests should avoid creating
+  temporary files or directories.  If unavoidable, use
+  `temporary-file-directory`.
+- **Integration test data**: Created by `tests/integration-test.sh`
+  inside the Guix container, which creates a temp directory,populates
+  it with test files, and builds a locate database via `updatedb`.
+  Cleanup is handled by an EXIT trap in the script.
 
-### 8.4 Test Outline Convention
+### 8.4 Integration Test Environment
+
+Integration tests run inside a `guix shell --container` with these
+packages:
+
+- `bash` -- script interpreter
+- `coreutils` -- basic file operations
+- `mlocate` -- provides `locate` and `updatedb`
+- `emacs-minimal` -- runs the test suite in batch mode
+
+The project directory is shared into the container via
+`--share=$(CURDIR)`, so `ol-locate-file.el` and all test files are
+accessible at their original paths.
+
+The test DB path is passed to Emacs via the `OC_LOCATE_TEST_DB`
+environment variable.  Integration test files access it through
+`org-locate-file-test--db-path` and configure locate with
+`org-locate-file-test--with-test-db`, which binds
+`org-locate-file-locate-args` to pass `locate -d DB_PATH`.
+
+See `tests/integration-test.sh` for the full setup and cleanup
+logic.
+
+### 8.5 Test Outline Convention
 
 Every test scenario uses a three-level outline via Elisp comment
 lines, supporting `outline-minor-mode` navigation:
@@ -366,13 +397,13 @@ lines, supporting `outline-minor-mode` navigation:
 ;;;;; One-line scenario description  (level-5 heading)
 ```
 
-- `;;;` — Groups tests for a single function (e.g. `;;; org-locate-file--resolve-method`).
-- `;;;;` — Groups scenarios by behavior category (e.g. `;;;; Flat value resolution`).
-- `;;;;;` — A single test scenario, followed immediately by its
+- `;;;` -- Groups tests for a single function (e.g. `;;; org-locate-file--resolve-method`).
+- `;;;;` -- Groups scenarios by behavior category (e.g. `;;;; Flat value resolution`).
+- `;;;;;` -- A single test scenario, followed immediately by its
   `ert-deftest` form.  The comment should be a complete one-line
   description of what the test verifies.
 
-### 8.5 Test Naming
+### 8.6 Test Naming
 
 ERT test names follow this pattern:
 
@@ -385,19 +416,31 @@ Examples:
 - `org-locate-file-test/resolve-method/alist-missing-context`
 - `org-locate-file-test/resolve-method/unrecognized-flat`
 
-### 8.6 Adding a New Unit Test File
+### 8.7 Adding a New Unit Test File
 
 1. Create `tests/ol-locate-file-unit-test-TOPIC.el`.
 2. Add `(require 'ert)` and `(require 'ol-locate-file)` at the top.
-3. Use the outline convention (8.4) and naming convention (8.5).
+3. Use the outline convention (8.5) and naming convention (8.6).
 4. Add the file to `UNIT_TEST_FILES` in the Makefile.
 5. Run `make unit-test` to verify.
 
-### 8.7 Running Tests
+### 8.8 Adding a New Integration Test
+
+1. Add new `ert-deftest` forms to
+   `tests/ol-locate-file-integration-test.el`.
+2. Use `org-locate-file-test--skip-unless-db` to guard tests
+   (skips when no test DB is configured).
+3. Use `org-locate-file-test--with-test-db` to wrap test logic
+   that calls locate; this binds `org-locate-file-locate-args`
+   to point at the test DB.
+4. Run `make integration-test` to verify.
+
+### 8.9 Running Tests
 
 ```bash
-make unit-test   # Unit tests only
-make test        # All tests (unit + integration)
+make unit-test        # Unit tests only
+make integration-test # Integration tests only (in Guix container)
+make test             # All tests (unit + integration)
 ```
 
 Exit code is non-zero when any test fails.

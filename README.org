@@ -227,3 +227,9 @@ General Public License for more details.
 
 You should have received a copy of the GNU General Public License along
 with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+* Acknowledgments
+
+This package was inspired by Karl Voit's blog article [[https://karl-voit.at/2022/02/10/lfile/][UOMF:
+Path-Independent Links to Local Files Via Locate]].  Many thanks to
+Karl for sharing the idea and his implementation.

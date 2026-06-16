@@ -1,1 +1,4 @@
 ol-local-file is an extended org link type for files in local machine. It is inspired by [[https://karl-voit.at/2022/02/10/lfile/][Kerl Voit's implementation]].
+
+* About
+A custom Org link type that uses the locate command to allow specifying files with only a partial path.

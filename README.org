@@ -55,9 +55,9 @@ submission is planned for the future).  In the meantime, install
 directly from the repository using =:vc=:
 
 #+begin_src emacs-lisp
-  (use-package ol-locate-file
-    :vc (:url "https://github.com/p-snow/ol-locate-file"
-         :rev :last-release))
+(use-package ol-locate-file
+  :vc ( :url "https://github.com/p-snow/ol-locate-file"
+        :rev :newest))
 #+end_src
 
 ** Manual installation

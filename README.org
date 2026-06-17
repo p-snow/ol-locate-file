@@ -96,7 +96,7 @@ automatically without prompting (customizable via
 
 ** Store
 
-When you invoke ~org-store-link~ (~C-c l~) in a file-visiting buffer or
+When you invoke ~org-store-link~ in a file-visiting buffer or
 Dired, the handler stores an =lfile:= link using the *shortest unique
 path suffix*.  For example:
 

@@ -204,6 +204,12 @@ The locate command is executed via ~call-process~, not a shell.  This
 avoids shell injection risks — no shell metacharacters in search strings
 are interpreted.
 
+* Acknowledgments
+
+This package was inspired by Karl Voit's blog article [[https://karl-voit.at/2022/02/10/lfile/][UOMF:
+Path-Independent Links to Local Files Via Locate]].  Many thanks to
+Karl for sharing the idea and his implementation.
+
 * License
 
 Copyright (C) 2026 Free Software Foundation, Inc.
@@ -220,9 +226,3 @@ General Public License for more details.
 
 You should have received a copy of the GNU General Public License along
 with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-* Acknowledgments
-
-This package was inspired by Karl Voit's blog article [[https://karl-voit.at/2022/02/10/lfile/][UOMF:
-Path-Independent Links to Local Files Via Locate]].  Many thanks to
-Karl for sharing the idea and his implementation.

@@ -39,6 +39,15 @@ The link type prefix (default ~"lfile"~) is customizable via
 
 * Installation
 
+** Dependencies
+
+- Emacs 30.1 (bundles Org 9.7+)
+- A file search backend.  The default is the =locate= command (or a
+  compatible alternative such as =plocate=).  If neither is available
+  on your system, the package can be configured to use other commands
+  like =find= via ~org-locate-file-locate-args~ — see below for
+  examples.
+
 ** Using =use-package= with =:vc=
 
 This package is not yet available on any package archive (MELPA
@@ -164,6 +173,15 @@ Controls how the locate command line is built:
 - ~function~: called with the search string; returns a command list or
   a string
 
+For example, to use =find= instead of =locate= on systems without a
+locate database:
+
+#+begin_example
+  (setq org-locate-file-locate-args
+        (lambda (pattern)
+          `("find" "/" "-name" ,(format "*%s*" pattern) "-type" "f")))
+#+end_example
+
 * Additional notes
 
 ** Search options (~::~ suffix)
@@ -180,36 +198,11 @@ The search option (after ~::~) is preserved through resolution and
 passed to ~org-link-open-as-file~.  The substring before ~::~ is used
 for the locate lookup.
 
-** Export
-
-Currently, no =:export= handler is registered for the =lfile:= link
-type.  During Org export, link types without an explicit export handler
-are handled by the export backend's fallback logic.  For HTML export,
-the link is typically rendered as-is (just the raw ~lfile:PATH~ text)
-or may be dropped depending on the backend.  An export handler may be
-added in a future release.
-
-** Customizing the link type prefix
-
-If you prefer a different prefix (e.g. ~"floc"~), set
-~org-locate-file-link-type~ before loading the package:
-
-#+begin_src emacs-lisp
-  (setq org-locate-file-link-type "floc")
-  (require 'ol-locate-file)
-#+end_src
-
 ** Security
 
 The locate command is executed via ~call-process~, not a shell.  This
 avoids shell injection risks — no shell metacharacters in search strings
 are interpreted.
-
-** Dependencies
-
-- Emacs 30.1 (bundles Org 9.7+)
-- The =locate= command (or compatible, such as =plocate=) must be
-  installed on your system.
 
 * License
 

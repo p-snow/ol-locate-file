@@ -30,24 +30,30 @@ org-locate-file--follow-impl("emacsclient::10", nil)
 org-locate-file--resolve("emacsclient")
        │
        ├── org-locate-file--run-locate("emacsclient")
-│   │
-        │   ├── org-locate-file--build-command("emacsclient")
-        │   │   ├── Uses org-locate-file-locate-args:
-        │   │   │   • nil         → locate-make-command-line
-        │   │   │   • string      → split prefix + ("emacsclient")
-        │   │   │   • list        → append ("emacsclient")
-        │   │   │   • function    → (funcall fn "emacsclient")
-        │   │   │       → ("locate" "--regex" "emacsclient")
-        │   │
-        │   └── call-process("locate" ... "--regex" "emacsclient")
-       │       → ("/usr/bin/emacsclient", "/usr/bin/emacs", ...)
-        │
-        ├── Single result → return "/usr/bin/emacsclient"
-        └── Multiple results (context = follow):
-             ├── org-locate-file-resolve-method = auto  → first result
-             ├── org-locate-file-resolve-method = recent → most recent mtime
-             ├── org-locate-file-resolve-method = ask   → completing-read
-             └── org-locate-file-resolve-method = fn    → (funcall fn candidates)
+       │   │
+       │   ├── org-locate-file--build-command("emacsclient")
+       │   │   ├── Uses org-locate-file-locate-args:
+       │   │   │   • nil         → locate-make-command-line
+       │   │   │   • string      → split prefix + ("emacsclient")
+       │   │   │   • list        → append ("emacsclient")
+       │   │   │   • function    → (funcall fn "emacsclient")
+       │   │   │
+       │   └── call-process("locate" ... "emacsclient")
+       │       → ("/usr/bin/emacsclient", "/usr/bin/emacs", "/tmp/packages", ...)
+       │
+       ├── Filter results with string-suffix-p("emacsclient"):
+       │   "/usr/bin/emacsclient" ─── ✓ (ends with "emacsclient")
+       │   "/usr/bin/emacs"       ─── ✗ (ends with "emacs", not "emacsclient")
+       │   "/tmp/packages"        ─── ✗
+       │   → ("/usr/bin/emacsclient")
+       │
+       ├── Single result → return "/usr/bin/emacsclient"
+       │
+       └── Multiple results (context = follow):
+            ├── org-locate-file-resolve-method = auto  → first result
+            ├── org-locate-file-resolve-method = recent → most recent mtime
+            ├── org-locate-file-resolve-method = ask   → completing-read
+            └── org-locate-file-resolve-method = fn    → (funcall fn candidates)
        │
        ▼
 org-link-open-as-file("/usr/bin/emacsclient::10", nil)
@@ -74,3 +80,13 @@ org-link-open-as-file("/usr/bin/emacsclient::10", nil)
   when multiple files match.  See that variable's docstring for details.
   Follow uses the `follow` context (default: `ask`), export uses
   the `export` context (default: `auto`).
+- Results are filtered with `string-suffix-p` against the search
+  string to exclude paths where the search string appears only as a
+  middle substring (e.g. "packages" matching "packages/child" or
+  "foo.el" matching "foo.elc").  When no result survives the filter,
+  the raw locate results are used as a fallback.
+- When the link was stored via `org-locate-file-store-link` or
+  `org-locate-file-complete-link`, the stored suffix is the output
+  of `org-locate-file--shortest-unique-suffix`, which excludes
+  children of directory targets from locate results during
+  computation.

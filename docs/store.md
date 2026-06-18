@@ -59,6 +59,13 @@ This ensures that following the stored link resolves to the correct
 file without ambiguity, even when the same filename appears in
 multiple locations.
 
+When the target path is a directory, files and subtrees inside that
+directory are excluded from locate results during suffix computation.
+These children are subordinate candidates -- they share the target's
+basename as a path prefix, not as a filename component -- and should
+not inflate the candidate count or prevent the directory itself from
+being identified by its basename alone.
+
 ## Link Format
 
 The stored link uses the shortest unique path suffix, so it looks

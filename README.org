@@ -214,7 +214,7 @@ the package will not work correctly.  Treat these Emacs variables as
 part of your locate configuration and verify that they satisfy the
 same requirements as any custom backend.
 
-* Recommended configurations
+*** Recommended configurations
 
 The safest configuration is to leave ~org-locate-file-locate-args~ at
 its default value (~nil~).  This delegates command-line construction to
@@ -248,7 +248,7 @@ string and returns a command list:
           `("plocate" "--ignore-case" ,pattern)))
 #+end_example
 
-* Non-guaranteed configurations
+*** Non-guaranteed configurations
 
 Even with the =locate= / =plocate= backend, certain options break the
 contracts that the package depends on:
@@ -292,7 +292,7 @@ the full path) with glob wildcards:
           `("find" "/" "-path" ,(format "*%s*" pattern) "-type" "f")))
 #+end_example
 
-* Rules for find
+*** Rules for find
 
 1. Use =-path=, not =-name=: =-name= matches only the basename.
    A search string like ~bin/emacsclient~ would never match because it
@@ -314,7 +314,7 @@ the full path) with glob wildcards:
    (=*=, =?=, =[]=), they are interpreted by =find=, not treated as
    literals.
 
-* Out of scope / not supported
+*** Out of scope / not supported
 
 - Performance optimization: =find= walks the filesystem on every
   query.  The package cannot accelerate this.  For large trees,
@@ -337,7 +337,7 @@ semantics, combine =--full-path= with =--fixed-strings=:
             "--fixed-strings" ,pattern ,(getenv "HOME"))))
 #+end_example
 
-* Rules for fd
+*** Rules for fd
 
 1. Use =--full-path=: Instructs =fd= to match the pattern against
    the full file path (not just the filename).  Without this flag,
@@ -366,7 +366,7 @@ semantics, combine =--full-path= with =--fixed-strings=:
    (case-insensitive when the pattern is all lowercase).  For
    explicit control, add =--case-sensitive= or =--ignore-case=.
 
-* Out of scope / not supported
+** Out of scope / not supported
 
 - =fd= version < 8.0: =--full-path= was introduced in fd 8.0.
   Earlier versions cannot provide substring matching against the
@@ -380,7 +380,7 @@ semantics, combine =--full-path= with =--fixed-strings=:
   include or exclude ignored files is the user's decision.  The
   package does not alter =fd='s default behavior.
 
-** Shared rules for all backends
+*** Shared rules for all backends
 
 Every custom backend command must satisfy these requirements:
 
@@ -397,7 +397,7 @@ Every custom backend command must satisfy these requirements:
 5. Exit with any exit code: The package ignores the exit code and
    treats an empty output buffer as "no matches".
 
-** Responsibility boundary
+*** Responsibility boundary
 
 The package provides first-class support for =locate= and =plocate=
 with the default ~org-locate-file-locate-args~.  Any other backend

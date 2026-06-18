@@ -174,13 +174,242 @@ Controls how the locate command line is built:
   a string
 
 For example, to use =find= instead of =locate= on systems without a
-locate database:
+locate database.  Note the use of =-path= (not =-name=) so that
+patterns containing partial path components (e.g. ~bin/emacsclient~)
+match correctly:
 
 #+begin_example
   (setq org-locate-file-locate-args
         (lambda (pattern)
-          `("find" "/" "-name" ,(format "*%s*" pattern) "-type" "f")))
+          `("find" "/" "-path" ,(format "*%s*" pattern) "-type" "f")))
 #+end_example
+
+Or use =fd= with =--fixed-strings= for substring-style matching
+against the full file path (closest to =locate='s behavior):
+
+#+begin_example
+  (setq org-locate-file-locate-args
+        (lambda (pattern)
+           `("fd" "--hidden" "--absolute-path" "--full-path" "--fixed-strings"
+             ,pattern ,(getenv "HOME"))))
+#+end_example
+
+* Backend configuration guide
+
+The package's default backend is =locate= (or =plocate=).  All core
+logic is designed around locate's semantics: the search string is
+matched as a substring against the full absolute file path, and the
+command returns all matching paths (one per line) in a single
+invocation.  Any custom backend configured via
+~org-locate-file-locate-args~ must satisfy these same contracts.
+
+** locate / plocate
+
+Even with the default ~nil~ configuration, the package relies on Emacs'
+built-in variables ~locate-command~, ~locate-make-command-line~, and
+~locate-prompt-for-command~.  If any of these are customized in ways
+that violate the contracts in "Shared rules for all backends" below
+(e.g. producing relative paths, using ~--regex~, or enabling prompting),
+the package will not work correctly.  Treat these Emacs variables as
+part of your locate configuration and verify that they satisfy the
+same requirements as any custom backend.
+
+*** Recommended configurations
+
+The safest configuration is to leave ~org-locate-file-locate-args~ at
+its default value (~nil~).  This delegates command-line construction to
+Emacs' built-in ~locate-make-command-line~, which respects standard
+Emacs variables like ~locate-command~ and ~locate-prompt-for-command~:
+
+#+begin_example
+  ;; Default: delegate to locate-make-command-line (recommended)
+  (setq org-locate-file-locate-args nil)
+#+end_example
+
+If you need a fixed option (e.g. case-insensitive matching), you can
+set a string or list value.  These produce equivalent commands:
+
+#+begin_example
+  ;; String form
+  (setq org-locate-file-locate-args "locate --ignore-case")
+
+  ;; List form (equivalent)
+  (setq org-locate-file-locate-args '("locate" "--ignore-case"))
+#+end_example
+
+Both invoke =locate --ignore-case PATTERN= at the command line.
+
+For full control, use a function.  The function receives the search
+string and returns a command list:
+
+#+begin_example
+  (setq org-locate-file-locate-args
+        (lambda (pattern)
+          `("plocate" "--ignore-case" ,pattern)))
+#+end_example
+
+*** Non-guaranteed configurations
+
+Even with the =locate= / =plocate= backend, certain options break the
+contracts that the package depends on:
+
+- **~--regex~**: Enables regex matching instead of substring matching.
+  The store handler's shortest-unique-suffix logic and the follow
+  handler's suffix-p filtering assume substring semantics.  With
+  ~--regex~, a search string like ~bin/emacsclient~ may match in
+  unexpected ways or not at all.
+
+- **~--basename~** (or equivalent): Matches only the filename, not the
+  full path.  This breaks path-component search (e.g. ~bin/emacsclient~)
+  and the shortest-unique-suffix algorithm, which relies on full-path
+  matching to disambiguate.
+
+- **~--limit~ / ~--count~**: Truncates results.  The store handler
+  needs all matches to compute the shortest unique suffix.  Missing
+  results cause incorrect (non-unique) suffixes.
+
+- **~--null~ / ~-0~**: Outputs NUL-separated paths instead of
+  newline-separated.  The package splits output by newline and will
+  produce a single garbled result.
+
+- **Options that produce relative paths**: The package expects
+  absolute paths (one per line).  Relative paths cause resolution and
+  suffix computation to produce incorrect or nil results.
+
+When in doubt, test your configuration with
+~org-locate-file--shortest-unique-suffix~ on a known file to verify
+that it returns a non-nil suffix.
+
+** find
+
+=find= is a live filesystem traversal tool.  To approximate locate's
+substring semantics, use the =-path= predicate (which matches against
+the full path) with glob wildcards:
+
+#+begin_example
+  (setq org-locate-file-locate-args
+        (lambda (pattern)
+          `("find" "/" "-path" ,(format "*%s*" pattern) "-type" "f")))
+#+end_example
+
+*** Rules for find
+
+1. **Use =-path=, not =-name=**: =-name= matches only the basename.
+   A search string like ~bin/emacsclient~ would never match because it
+   contains a directory separator.
+
+2. **Always specify ="/"= as the search root** (or a directory
+   covered by your locate database equivalent).  Otherwise =find=
+   defaults to the current directory, which is rarely what you want.
+
+3. **Output must be absolute paths**: =find= with an absolute search
+   root (e.g. ="/"=) produces absolute paths by default, satisfying
+   this requirement.
+
+4. **No interactive predicates**: Options like ~-ok~ or ~-exec~
+   that prompt or require confirmation block batch Emacs.
+
+5. **Substring matching via glob**: =find -path "*PATTERN*"= uses
+   glob matching.  If your pattern contains glob metacharacters
+   (=*=, =?=, =[]=), they are interpreted by =find=, not treated as
+   literals.
+
+*** Out of scope / not supported
+
+- Performance optimization: =find= walks the filesystem on every
+  query.  The package cannot accelerate this.  For large trees,
+  consider setting ~org-locate-file-max-results~ to bound the output
+  (though the command itself still runs to completion).
+
+- Database integration: The package does not manage or trigger
+  =updatedb=, nor does it integrate with =locate=
+  database-building tools when using =find=.
+
+** fd
+
+=fd= is a modern, fast alternative.  To match locate's substring
+semantics, combine =--full-path= with =--fixed-strings=:
+
+#+begin_example
+  (setq org-locate-file-locate-args
+        (lambda (pattern)
+          `("fd" "--hidden" "--absolute-path" "--full-path"
+            "--fixed-strings" ,pattern ,(getenv "HOME"))))
+#+end_example
+
+*** Rules for fd
+
+1. **Use =--full-path=**: Instructs =fd= to match the pattern against
+   the full file path (not just the filename).  Without this flag,
+   =fd= matches only the basename, which breaks path-component search.
+
+2. **Use =--fixed-strings=**: Treats the pattern as a literal
+   substring.  Without this flag, =fd= uses regex by default, and
+   metacharacters in the search string would be interpreted.  Do
+   NOT use =--glob= with =--full-path=, because the glob =*= does not
+   match =/= in =fd=.
+
+3. **Use =--absolute-path=**: The package expects absolute paths.
+   Without this flag, =fd= outputs paths relative to the search root.
+
+4. **Specify a search root**: The last argument to =fd= is the
+   directory to search.  Omitting it defaults to the current
+   directory, which is rarely the intended behavior.  Use
+   ~(getenv "HOME")~ or an explicit path.
+
+5. **Consider =--hidden=**: =fd= skips hidden files (dotfiles) by
+   default.  If you want to match files like =~/.emacs.d/init.el=, add
+   =--hidden=.  For files inside =.git/=, additionally add
+   =--no-ignore=.
+
+6. **Consider case sensitivity**: =fd= uses smart case by default
+   (case-insensitive when the pattern is all lowercase).  For
+   explicit control, add =--case-sensitive= or =--ignore-case=.
+
+*** Out of scope / not supported
+
+- =fd= version < 8.0: =--full-path= was introduced in fd 8.0.
+  Earlier versions cannot provide substring matching against the
+  full path.
+
+- =--glob= with =--full-path=: As noted above, the combination does
+  not work for substring matching.  Users who prefer glob syntax
+  should use the =find= backend instead.
+
+- Git integration: =fd= respects =.gitignore= by default.  Whether to
+  include or exclude ignored files is the user's decision.  The
+  package does not alter =fd='s default behavior.
+
+** Shared rules for all backends
+
+Every custom backend command must satisfy these requirements:
+
+1. **Output absolute paths, one per line** on stdout.  No extra
+   formatting, headers, or separators.
+2. **Match the search string as a substring against the full file
+   path**.  The shortest-unique-suffix algorithm, suffix-p filtering,
+   and completion all depend on this.
+3. **Return all matching results** in a single invocation.  Do not
+   paginate, limit, or prompt.
+4. **Accept the search string as a literal argument** passed via
+   ~call-process~.  No interactive input, no shell metacharacter
+   interpretation.
+5. **Exit with any exit code**: The package ignores the exit code and
+   treats an empty output buffer as "no matches".
+
+** Responsibility boundary
+
+The package provides first-class support for =locate= and =plocate=
+with the default ~org-locate-file-locate-args~.  Any other backend
+or option is a user responsibility.
+
+Failures caused by custom backends (e.g. missing =--absolute-path=,
+wrong matching semantics, relative paths, truncated results) are not
+bugs in the package.  Before reporting an issue, verify that your
+backend satisfies the requirements above.  Unit tests mock
+~org-locate-file--run-locate~ and pass independently of any backend;
+integration tests for =find= and =fd= are smoke tests only and do not
+constitute a compatibility guarantee.
 
 * Additional notes
 

@@ -316,18 +316,30 @@ the alist has no entry for CONTEXT or the value is unrecognized."
 
 (defun org-locate-file--resolve (search-string &optional context)
   "Resolve SEARCH-STRING to a single file path using locate.
+
 CONTEXT is `follow' or `export', used when
 `org-locate-file-resolve-method' is an alist.
+
+Locate results are filtered with `string-suffix-p' against
+SEARCH-STRING to exclude paths where SEARCH-STRING appears only
+as a substring (e.g. \"packages\" matching \"packages/child\" or
+\"foo.el\" matching \"foo.elc\").  When no result survives the
+filter, the raw locate results are used as a fallback.
+
 When exactly one candidate matches, return it directly."
   (let* ((method (org-locate-file--resolve-method context))
-         (candidates (org-locate-file--run-locate search-string)))
-    (if (null (cdr candidates))
-        (car candidates)
+         (candidates (org-locate-file--run-locate search-string))
+         (filtered (cl-remove-if-not
+                    (lambda (p) (string-suffix-p search-string p))
+                    candidates))
+         (effective (or filtered candidates)))
+    (if (null (cdr effective))
+        (car effective)
       (pcase method
         ((pred functionp)
-         (funcall method candidates))
+         (funcall method effective))
         ('recent
-         (org-locate-file--pick-recent candidates))
+         (org-locate-file--pick-recent effective))
         ('ask
          (let ((choice
                 (completing-read
@@ -338,13 +350,13 @@ When exactly one candidate matches, return it directly."
                        '(metadata
                          (display-sort-function . identity)
                          (cycle-sort-function . identity))
-                     (complete-with-action action candidates string pred)))
+                     (complete-with-action action effective string pred)))
                  nil t nil 'org-locate-file--history)))
            (if (string-empty-p choice)
                (user-error "No file selected")
              choice)))
         (_
-         (car candidates))))))
+         (car effective))))))
 
 ;;; Follow handlers
 

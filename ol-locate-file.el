@@ -3,6 +3,7 @@
 ;; Copyright (C) 2026  Free Software Foundation, Inc.
 
 ;; Author: p-snow <public@p-snow.org>
+;; Assisted-by: DeepSeek V4 Pro
 ;; Keywords: hypermedia, convenience
 ;; URL: https://github.com/p-snow/ol-locate-file
 ;; Package-Requires: ((emacs "30.1") (org "9.3"))

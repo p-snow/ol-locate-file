@@ -391,14 +391,58 @@ basename, return just the basename."
                     "/usr/bin/emacsclient")
                    "emacsclient"))))
 
+;;;;; Directory path with trailing slash normalizes correctly
+(ert-deftest org-locate-file-test/shortest-unique-suffix/dir-trailing-slash ()
+  "A directory path ending in \"/\" (as returned by
+`dired-get-filename' for directories) is normalized by
+`directory-file-name', producing the correct basename."
+  (cl-letf (((symbol-function 'org-locate-file--run-locate)
+             (lambda (s)
+               (cond
+                ((equal s "lib")
+                 (list "/home/user/project/src/lib"))
+                (t nil)))))
+    (should (equal (org-locate-file--shortest-unique-suffix
+                    "/home/user/project/src/lib/")
+                   "lib"))))
+
+;;;;; Directory with trailing slash and disambiguation
+(ert-deftest org-locate-file-test/shortest-unique-suffix/dir-trailing-slash-disambig ()
+  "A directory path with trailing slash needing disambiguation
+works correctly: the trailing slash is stripped, the basename is
+found, and directory components are prepended as needed."
+  (cl-letf (((symbol-function 'org-locate-file--run-locate)
+             (lambda (s)
+               (cond
+                ((equal s "lib")
+                 (list "/home/user/project/src/lib"
+                       "/home/user/other/src/lib"))
+                ((equal s "src/lib")
+                 (list "/home/user/project/src/lib"
+                       "/home/user/other/src/lib"))
+                ((equal s "project/src/lib")
+                 (list "/home/user/project/src/lib"))
+                (t nil)))))
+    (should (equal (org-locate-file--shortest-unique-suffix
+                    "/home/user/project/src/lib/")
+                   "project/src/lib"))))
+
 ;;;;; Unique suffix after one directory level
 (ert-deftest org-locate-file-test/shortest-unique-suffix/one-dir-level ()
   "When multiple files share a basename and one directory level
-is enough to disambiguate, return that two-component suffix."
+is enough to disambiguate via locate, return that two-component suffix."
   (cl-letf (((symbol-function 'org-locate-file--run-locate)
-             (lambda (_s)
-               (list "/usr/bin/emacsclient"
-                     "/usr/local/bin/emacsclient"))))
+             (lambda (s)
+               (cond
+                ((equal s "emacsclient")
+                 (list "/usr/bin/emacsclient"
+                       "/usr/local/bin/emacsclient"))
+                ((equal s "bin/emacsclient")
+                 (list "/usr/bin/emacsclient"
+                       "/usr/local/bin/emacsclient"))
+                ((equal s "usr/bin/emacsclient")
+                 (list "/usr/bin/emacsclient"))
+                (t nil)))))
     (should (equal (org-locate-file--shortest-unique-suffix
                     "/usr/bin/emacsclient")
                    "usr/bin/emacsclient"))))

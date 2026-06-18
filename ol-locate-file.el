@@ -460,34 +460,61 @@ Returns non-nil when a preview is displayed, nil otherwise."
 (defun org-locate-file--shortest-unique-suffix (file-path)
   "Compute the shortest unique suffix of FILE-PATH among locate results.
 
-Run locate with the basename of FILE-PATH, collect all matches,
-and return the shortest suffix (from the end of the path components)
-that uniquely identifies FILE-PATH among those matches.
+FILE-PATH may be a file or directory path, with or without a
+trailing slash.  It is normalized via `directory-file-name'
+before processing, so that directory paths ending in \"/\" are
+handled correctly.
 
-When exactly one result matches the basename, return just the
-basename.  When multiple results match, prepend directory components
-from the parent upward until the suffix is unique.
+Run locate with the basename of FILE-PATH.  If the target is not
+found in the results, return nil.  If exactly one result matches
+the basename under `string-suffix-p' (anchoring to end of path),
+return just the basename.  Otherwise, progressively prepend
+directory components from the parent upward, re-running locate
+at each step and filtering with `string-suffix-p', until the
+suffix uniquely identifies FILE-PATH among the locate results.
+
+Paths inside the target directory (children) are excluded from
+locate results, because they are subordinate to the target and
+should not count as competing candidates.
 
 Return nil if FILE-PATH is not found in the locate database."
-  (let ((basename (file-name-nondirectory file-path)))
+  (let* ((normalized (directory-file-name file-path))
+         (basename (file-name-nondirectory normalized))
+         (children-prefix (concat normalized "/")))
     (condition-case nil
-        (let* ((results (org-locate-file--run-locate basename))
-               (count (length results)))
-          (when (member file-path results)
+        (let* ((org-locate-file-max-results nil)
+               (results (org-locate-file--run-locate basename))
+               (non-children (cl-remove-if
+                              (lambda (r)
+                                (string-prefix-p children-prefix r))
+                              results))
+               (suffix-filtered (cl-remove-if-not
+                                 (lambda (r)
+                                   (string-suffix-p basename r))
+                                 non-children))
+               (count (length suffix-filtered)))
+          (when (member normalized non-children)
             (if (= 1 count)
                 basename
-              (let* ((dir (file-name-directory file-path))
+              (let* ((dir (file-name-directory normalized))
                      (components (when dir
                                    (split-string
                                     (directory-file-name dir) "/" t)))
                      (suffix basename))
                 (cl-loop for comp in (nreverse components)
                          do (setq suffix (concat comp "/" suffix))
-                         when (= 1
-                                 (cl-count-if
-                                  (lambda (r)
-                                    (string-suffix-p suffix r))
-                                  results))
+                         for locate-results = (org-locate-file--run-locate
+                                               suffix)
+                         for non-child-results = (cl-remove-if
+                                                  (lambda (r)
+                                                    (string-prefix-p
+                                                     children-prefix r))
+                                                  locate-results)
+                         for filtered = (cl-remove-if-not
+                                         (lambda (r)
+                                           (string-suffix-p suffix r))
+                                         non-child-results)
+                         when (= 1 (length filtered))
                          return suffix
                          finally return suffix)))))
       (user-error nil))))

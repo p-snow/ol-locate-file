@@ -522,7 +522,28 @@ condition-case handler returns nil."
   (cl-letf (((symbol-function 'org-locate-file--run-locate)
              (lambda (_s) (user-error "No matches"))))
     (should (null (org-locate-file--shortest-unique-suffix
-                   "/usr/bin/emacsclient")))))
+                    "/usr/bin/emacsclient")))))
+
+;;;;; Directory with children excludes those children
+(ert-deftest org-locate-file-test/shortest-unique-suffix/dir-with-children ()
+  "When the target is a directory that contains files, those
+children paths are excluded from locate results so they don't
+inflate the candidate count.  The suffix uses directory components
+as needed when other unrelated paths match."
+  (cl-letf (((symbol-function 'org-locate-file--run-locate)
+             (lambda (s)
+               (cond
+                ((equal s "packages")
+                 (list "/home/user/proj/packages"
+                       "/home/user/proj/packages/file1.txt"
+                       "/home/user/proj/packages/subdir/file2.el"
+                       "/usr/share/packages"))
+                ((equal s "proj/packages")
+                 (list "/home/user/proj/packages"))
+                (t nil)))))
+    (should (equal (org-locate-file--shortest-unique-suffix
+                    "/home/user/proj/packages")
+                   "proj/packages"))))
 
 ;;; org-locate-file--follow-impl
 

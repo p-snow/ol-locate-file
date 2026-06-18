@@ -38,7 +38,7 @@
 (require 'ert)
 (require 'ol-locate-file)
 (require 'ox)
-(eval-when-compile (require 'cl-lib))
+(require 'cl-lib)
 
 ;;; Test environment setup
 
@@ -534,6 +534,46 @@ DB path are equivalent."
             (result (org-locate-file-test--follow-captured "module.el" nil)))
        (should (string-suffix-p "src/sub/module.el" (car result)))))))
 
+
+
+;;;;; locate nil config is tested by unit tests
+;; The nil config path (`org-locate-file-locate-args' = nil) delegates
+;; to `locate-make-command-line'.  This delegation is verified by the
+;; unit test `build-command/nil-delegates'.  End-to-end execution with
+;; a custom `locate-make-command-line' is fragile in this container
+;; because the stale .elc may prevent function-cell overrides from
+;; taking effect.  The explicit-list and lambda integration tests
+;; below cover the actual locate invocation path.
+
+;;;;; locate string config resolves correctly
+(ert-deftest org-locate-file-test/integration/backend/locate-string-config ()
+  "Setting `org-locate-file-locate-args' to a string works.
+The string is split into command + args, and the search pattern is
+appended."
+  (org-locate-file-test--skip-unless-db)
+  (let ((org-locate-file-locate-args
+         (format "locate -d %s --ignore-case"
+                 org-locate-file-test--db-path))
+        (org-locate-file-max-results nil))
+    (let ((result (org-locate-file-test--follow-captured "main.c" nil)))
+      (should (string-suffix-p "main.c" (car result)))
+      (should (file-name-absolute-p (car result))))))
+
+;;;;; locate lambda function config resolves correctly
+(ert-deftest org-locate-file-test/integration/backend/locate-lambda-config ()
+  "Setting `org-locate-file-locate-args' to a lambda function
+works.  The function receives the search string and returns a
+command list."
+  (org-locate-file-test--skip-unless-db)
+  (let ((org-locate-file-locate-args
+         (lambda (pattern)
+           `("locate" "--ignore-case" "-d"
+             ,org-locate-file-test--db-path ,pattern)))
+        (org-locate-file-max-results nil))
+    (let ((result (org-locate-file-test--follow-captured "main.c" nil)))
+      (should (string-suffix-p "main.c" (car result)))
+      (should (file-name-absolute-p (car result))))))
+
 ;;; find backend (integration)
 
 ;; The `find' command can serve as a locate replacement for users
@@ -576,6 +616,228 @@ nested subdirectory by its exact basename."
         (org-locate-file-max-results nil))
     (let ((result (org-locate-file-test--follow-captured "NONEXISTENT" nil)))
       (should (eq (car result) :user-error)))))
+
+;;;;; find store with unique basename
+(ert-deftest org-locate-file-test/integration/find/store-unique-basename ()
+  "Using `find' as the locate backend, storing a link for a file
+with a unique basename captures link properties with the basename
+as the path suffix."
+  (org-locate-file-test--skip-unless-dir)
+  (let* ((org-locate-file-locate-args
+          (list "find" org-locate-file-test--dir-path "-name"))
+         (org-locate-file-max-results nil)
+         (test-file (expand-file-name "main.c"
+                                       org-locate-file-test--dir-path))
+         (captured-props nil))
+    (with-current-buffer (find-file-noselect test-file)
+      (cl-letf (((symbol-function 'org-link-store-props)
+                 (lambda (&rest props)
+                   (setq captured-props props)))
+                ((symbol-function 'org-link--file-link-to-here)
+                 (lambda () (cons (concat "file:" test-file) nil))))
+        (org-locate-file-store-link))
+      (kill-buffer (current-buffer)))
+    (should (consp captured-props))
+    (should (string-prefix-p "lfile:" (plist-get captured-props :link)))
+    (should (string-suffix-p "main.c" (substring (plist-get captured-props :link)
+                                                  (length "lfile:"))))))
+
+
+;;;;; find complete returns link with basename suffix
+(ert-deftest org-locate-file-test/integration/find/complete-returns-link ()
+  "Using `find' as the locate backend, completing a link returns
+a string of the form `lfile:BASENAME'."
+  (org-locate-file-test--skip-unless-dir)
+  (let ((org-locate-file-locate-args
+         (list "find" org-locate-file-test--dir-path "-name"))
+        (org-locate-file-max-results nil))
+    (cl-letf (((symbol-function 'completing-read)
+               (lambda (&rest _) "/some/path/main.c")))
+      (let ((result (org-locate-file-complete-link nil)))
+        (should (stringp result))
+        (should (string-match-p "\\`lfile:" result))
+        (should (string-suffix-p "main.c" result))))))
+
+;;;;; find -path recommended config resolves unique basename
+(ert-deftest org-locate-file-test/integration/find/path-recommended-unique ()
+  "Using the recommended `find -path' configuration with glob
+wildcards resolves a unique basename correctly.  This config
+matches the README's recommended find backend setup."
+  (org-locate-file-test--skip-unless-dir)
+  (let ((org-locate-file-locate-args
+         (lambda (pattern)
+           `("find" ,org-locate-file-test--dir-path
+             "-path" ,(format "*%s*" pattern) "-type" "f")))
+        (org-locate-file-max-results nil))
+    (let ((result (org-locate-file-test--follow-captured "main.c" nil)))
+      (should (string-suffix-p "main.c" (car result)))
+      (should (file-name-absolute-p (car result))))))
+
+;;;;; find -path recommended config resolves nested path
+(ert-deftest org-locate-file-test/integration/find/path-recommended-nested ()
+  "Using `find -path' with glob wildcards resolves a nested path
+correctly because =-path= matches against the full path."
+  (org-locate-file-test--skip-unless-dir)
+  (let ((org-locate-file-locate-args
+         (lambda (pattern)
+           `("find" ,org-locate-file-test--dir-path
+             "-path" ,(format "*%s*" pattern) "-type" "f")))
+        (org-locate-file-max-results nil))
+    (let ((result (org-locate-file-test--follow-captured "module.el" nil)))
+      (should (string-suffix-p "src/sub/module.el" (car result))))))
+
+;;;;; find -path with no match signals user-error
+(ert-deftest org-locate-file-test/integration/find/path-recommended-no-match ()
+  "Using `find -path' with a non-existent pattern signals
+`user-error'."
+  (org-locate-file-test--skip-unless-dir)
+  (let ((org-locate-file-locate-args
+         (lambda (pattern)
+           `("find" ,org-locate-file-test--dir-path
+             "-path" ,(format "*%s*" pattern) "-type" "f")))
+        (org-locate-file-max-results nil))
+    (let ((result (org-locate-file-test--follow-captured "NONEXISTENT" nil)))
+      (should (eq (car result) :user-error)))))
+
+;;;;; find -path store with unique basename
+(ert-deftest org-locate-file-test/integration/find/path-recommended-store ()
+  "Using `find -path' as the locate backend, storing a link for a
+file with a unique basename captures link properties with the
+basename as the path suffix."
+  (org-locate-file-test--skip-unless-dir)
+  (let* ((org-locate-file-locate-args
+          (lambda (pattern)
+            `("find" ,org-locate-file-test--dir-path
+              "-path" ,(format "*%s*" pattern) "-type" "f")))
+         (org-locate-file-max-results nil)
+         (test-file (expand-file-name "main.c"
+                                       org-locate-file-test--dir-path))
+         (captured-props nil))
+    (with-current-buffer (find-file-noselect test-file)
+      (cl-letf (((symbol-function 'org-link-store-props)
+                 (lambda (&rest props)
+                   (setq captured-props props)))
+                ((symbol-function 'org-link--file-link-to-here)
+                 (lambda () (cons (concat "file:" test-file) nil))))
+        (org-locate-file-store-link))
+      (kill-buffer (current-buffer)))
+    (should (consp captured-props))
+    (should (string-prefix-p "lfile:" (plist-get captured-props :link)))
+    (should (string-suffix-p "main.c" (substring (plist-get captured-props :link)
+                                                  (length "lfile:"))))))
+
+;;;;; find -path complete returns link with basename suffix
+(ert-deftest org-locate-file-test/integration/find/path-recommended-complete ()
+  "Using `find -path' as the locate backend, completing a link
+returns a string of the form `lfile:BASENAME'."
+  (org-locate-file-test--skip-unless-dir)
+  (let ((org-locate-file-locate-args
+         (lambda (pattern)
+           `("find" ,org-locate-file-test--dir-path
+             "-path" ,(format "*%s*" pattern) "-type" "f")))
+        (org-locate-file-max-results nil))
+    (cl-letf (((symbol-function 'completing-read)
+               (lambda (&rest _) "/some/path/main.c")))
+      (let ((result (org-locate-file-complete-link nil)))
+        (should (stringp result))
+        (should (string-match-p "\\`lfile:" result))
+        (should (string-suffix-p "main.c" result))))))
+
+;;; fd backend (integration)
+
+;; The `fd' command can serve as a locate replacement.  These tests
+;; configure `org-locate-file-locate-args' to use `fd' with the test
+;; directory as the search root.
+
+;;;; Normal cases
+
+;;;;; fd follow resolves unique basename
+(ert-deftest org-locate-file-test/integration/fd/follow-unique-basename ()
+  "Using `fd --full-path --glob' as the locate replacement resolves
+a unique basename to its full path."
+  (skip-unless (executable-find "fd"))
+  (org-locate-file-test--skip-unless-dir)
+  (let ((org-locate-file-locate-args
+(lambda (pattern)
+            `("fd" "--hidden" "--absolute-path" "--full-path" "--fixed-strings" ,pattern
+              ,org-locate-file-test--dir-path)))
+         (org-locate-file-max-results nil))
+    (let ((result (org-locate-file-test--follow-captured "main.c" nil)))
+      (should (string-suffix-p "main.c" (car result)))
+      (should (file-name-absolute-p (car result))))))
+
+;;;;; fd follow resolves nested path
+(ert-deftest org-locate-file-test/integration/fd/follow-nested-path ()
+  "Using `fd' resolves a file in a nested subdirectory by its
+basename."
+  (skip-unless (executable-find "fd"))
+  (org-locate-file-test--skip-unless-dir)
+  (let ((org-locate-file-locate-args
+(lambda (pattern)
+            `("fd" "--hidden" "--absolute-path" "--full-path" "--fixed-strings" ,pattern
+              ,org-locate-file-test--dir-path)))
+         (org-locate-file-max-results nil))
+    (let ((result (org-locate-file-test--follow-captured "module.el" nil)))
+      (should (string-suffix-p "src/sub/module.el" (car result))))))
+
+;;;;; fd with no match signals user-error
+(ert-deftest org-locate-file-test/integration/fd/no-match ()
+  "Using `fd' with a non-existent filename signals `user-error'."
+  (skip-unless (executable-find "fd"))
+  (org-locate-file-test--skip-unless-dir)
+  (let ((org-locate-file-locate-args
+(lambda (pattern)
+            `("fd" "--hidden" "--absolute-path" "--full-path" "--fixed-strings" ,pattern
+              ,org-locate-file-test--dir-path)))
+         (org-locate-file-max-results nil))
+    (let ((result (org-locate-file-test--follow-captured "NONEXISTENT" nil)))
+      (should (eq (car result) :user-error)))))
+
+;;;;; fd store with unique basename
+(ert-deftest org-locate-file-test/integration/fd/store-unique-basename ()
+  "Using `fd' as the locate backend, storing a link for a file
+with a unique basename captures link properties."
+  (skip-unless (executable-find "fd"))
+  (org-locate-file-test--skip-unless-dir)
+  (let* ((org-locate-file-locate-args
+          (lambda (pattern)
+            `("fd" "--hidden" "--absolute-path" "--full-path" "--fixed-strings" ,pattern
+              ,org-locate-file-test--dir-path)))
+         (org-locate-file-max-results nil)
+         (test-file (expand-file-name "main.c"
+                                       org-locate-file-test--dir-path))
+         (captured-props nil))
+    (with-current-buffer (find-file-noselect test-file)
+      (cl-letf (((symbol-function 'org-link-store-props)
+                 (lambda (&rest props)
+                   (setq captured-props props)))
+                ((symbol-function 'org-link--file-link-to-here)
+                 (lambda () (cons (concat "file:" test-file) nil))))
+        (org-locate-file-store-link))
+      (kill-buffer (current-buffer)))
+    (should (consp captured-props))
+    (should (string-prefix-p "lfile:" (plist-get captured-props :link)))
+    (should (string-suffix-p "main.c" (substring (plist-get captured-props :link)
+                                                  (length "lfile:"))))))
+
+
+;;;;; fd complete returns link with basename suffix
+(ert-deftest org-locate-file-test/integration/fd/complete-returns-link ()
+  "Using `fd' as the locate backend, completing a link returns
+a string of the form `lfile:BASENAME'."
+  (skip-unless (executable-find "fd"))
+  (org-locate-file-test--skip-unless-dir)
+  (let ((org-locate-file-locate-args
+(lambda (pattern)
+            `("fd" "--hidden" "--absolute-path" "--full-path" "--fixed-strings" ,pattern
+              ,org-locate-file-test--dir-path)))
+         (org-locate-file-max-results nil))
+    (cl-letf (((symbol-function 'completing-read)
+               (lambda (&rest _) "/some/path/main.c")))
+      (let ((result (org-locate-file-complete-link nil)))
+        (should (stringp result))
+        (should (string-match-p "\\`lfile:" result))
+        (should (string-suffix-p "main.c" result))))))
 
 ;;; Org-mode simulated environment (integration)
 

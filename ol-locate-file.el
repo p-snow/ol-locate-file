@@ -189,18 +189,16 @@ like `fd' that output relative paths by default must be passed an
  :complete #'org-locate-file-complete-link
  :export #'org-locate-file--export
  :preview #'org-locate-file--preview)
-;; Register lfile+emacs variant
+;; Register lfile+emacs variant (no :store -- same as file+emacs)
 (org-link-set-parameters
  (concat org-locate-file-link-type "+emacs")
  :follow #'org-locate-file--follow-emacs
- :store #'org-locate-file-store-link
  :export #'org-locate-file--export
  :preview #'org-locate-file--preview)
-;; Register lfile+sys variant
+;; Register lfile+sys variant (no :store -- same as file+sys)
 (org-link-set-parameters
  (concat org-locate-file-link-type "+sys")
  :follow #'org-locate-file--follow-sys
- :store #'org-locate-file-store-link
  :export #'org-locate-file--export
  :preview #'org-locate-file--preview)
 

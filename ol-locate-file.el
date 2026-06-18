@@ -607,7 +607,8 @@ and traditional styles like `basic', `partial-completion', etc.
            nil nil nil 'org-locate-file--history)))
     (if (string-empty-p choice)
         (concat type ":")
-      (concat type ":" (file-name-nondirectory choice)))))
+      (let ((suffix (org-locate-file--shortest-unique-suffix choice)))
+        (concat type ":" (or suffix (file-name-nondirectory choice)))))))
 
 ;;; Footer
 

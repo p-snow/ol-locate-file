@@ -355,6 +355,30 @@ it with the candidates list and return its result."
       (should (equal (org-locate-file--resolve "emacs" 'follow)
                      "/usr/bin/emacs")))))
 
+;;;;; Substring-only matches are filtered out by string-suffix-p
+(ert-deftest org-locate-file-test/resolve/substring-filtered ()
+  "When locate returns paths where SEARCH-STRING appears only as
+a substring (e.g. \"packages\" matching \"packages/child\" or
+\"foo.el\" matching \"foo.elc\"), those are filtered out by
+`string-suffix-p' and only exact suffix matches remain."
+  (cl-letf (((symbol-function 'org-locate-file--run-locate)
+             (lambda (_s)
+               (list "/home/user/proj/packages"
+                     "/home/user/proj/packages/child"))))
+    (should (equal (org-locate-file--resolve "packages")
+                   "/home/user/proj/packages"))))
+
+;;;;; Empty filtered list falls back to raw candidates
+(ert-deftest org-locate-file-test/resolve/empty-filter-fallback ()
+  "When no candidate ends with SEARCH-STRING, the raw locate
+results are used as fallback."
+  (cl-letf (((symbol-function 'org-locate-file--run-locate)
+             (lambda (_s)
+               (list "/path/to/foo.elc" "/other/bar.elc"))))
+    (let ((org-locate-file-resolve-method 'auto))
+      (should (equal (org-locate-file--resolve "elc")
+                     "/path/to/foo.elc")))))
+
 ;;; org-locate-file--shortest-unique-suffix
 
 ;;;;; Single file match returns basename

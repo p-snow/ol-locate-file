@@ -466,17 +466,18 @@ trailing slash.  It is normalized via `directory-file-name'
 before processing, so that directory paths ending in \"/\" are
 handled correctly.
 
-Run locate with the basename of FILE-PATH.  If the target is not
-found in the results, return nil.  If exactly one result matches
-the basename under `string-suffix-p' (anchoring to end of path),
-return just the basename.  Otherwise, progressively prepend
-directory components from the parent upward, re-running locate
-at each step and filtering with `string-suffix-p', until the
-suffix uniquely identifies FILE-PATH among the locate results.
+The function runs locate once with the basename of FILE-PATH,
+then computes the shortest suffix that uniquely identifies
+FILE-PATH by comparing against other locate results in memory.
 
 Paths inside the target directory (children) are excluded from
-locate results, because they are subordinate to the target and
+consideration, because they are subordinate to the target and
 should not count as competing candidates.
+
+If the basename alone is unique among the results, return just
+the basename.  Otherwise, progressively prepend parent directory
+components until the suffix is unique, or all components are
+exhausted.
 
 Return nil if FILE-PATH is not found in the locate database."
   (let* ((normalized (directory-file-name file-path))
@@ -485,39 +486,37 @@ Return nil if FILE-PATH is not found in the locate database."
     (condition-case nil
         (let* ((org-locate-file-max-results nil)
                (results (org-locate-file--run-locate basename))
+               ;; Exclude paths inside the target directory (children)
                (non-children (cl-remove-if
                               (lambda (r)
                                 (string-prefix-p children-prefix r))
                               results))
-               (suffix-filtered (cl-remove-if-not
-                                 (lambda (r)
-                                   (string-suffix-p basename r))
-                                 non-children))
-               (count (length suffix-filtered)))
-          (when (member normalized non-children)
-            (if (= 1 count)
+               ;; Only consider paths that end with the basename
+               (candidates (cl-remove-if-not
+                            (lambda (r)
+                              (string-suffix-p basename r))
+                            non-children)))
+          ;; Target must be present among the candidates
+          (when (member normalized candidates)
+            (if (null (cdr candidates))
+                ;; Exactly one candidate: basename alone is unique
                 basename
+              ;; Multiple candidates: find the shortest disambiguating suffix
               (let* ((dir (file-name-directory normalized))
                      (components (when dir
                                    (split-string
                                     (directory-file-name dir) "/" t)))
-                     (suffix basename))
-                (cl-loop for comp in (nreverse components)
-                         do (setq suffix (concat comp "/" suffix))
-                         for locate-results = (org-locate-file--run-locate
-                                               suffix)
-                         for non-child-results = (cl-remove-if
-                                                  (lambda (r)
-                                                    (string-prefix-p
-                                                     children-prefix r))
-                                                  locate-results)
-                         for filtered = (cl-remove-if-not
-                                         (lambda (r)
-                                           (string-suffix-p suffix r))
-                                         non-child-results)
-                         when (= 1 (length filtered))
-                         return suffix
-                         finally return suffix)))))
+                     (suffix basename)
+                     (others (cl-remove normalized candidates :test #'equal)))
+                (catch 'unique
+                  (dolist (comp (nreverse components))
+                    (setq suffix (concat comp "/" suffix))
+                    (unless (cl-some (lambda (other)
+                                       (string-suffix-p suffix other))
+                                     others)
+                      (throw 'unique suffix)))
+                  ;; Exhausted all components; suffix is the fullest form
+                  suffix)))))
       (user-error nil))))
 
 ;;;###autoload

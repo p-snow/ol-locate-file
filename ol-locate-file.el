@@ -199,7 +199,7 @@ command line.  See that variable for details."
                     (funcall locate-make-command-line search-string))
                    ((functionp org-locate-file-locate-args)
                     (let ((result (funcall org-locate-file-locate-args
-                                          search-string)))
+                                           search-string)))
                       (if (stringp result)
                           (split-string-and-unquote result)
                         result)))
@@ -292,7 +292,7 @@ otherwise return the value directly.  Falls back to `auto' when
 the alist has no entry for CONTEXT or the value is unrecognized."
   (let ((value org-locate-file-resolve-method))
     (if (and (consp value) (assq (or context 'follow) value))
-         (let ((method (cadr (assq (or context 'follow) value))))
+        (let ((method (cadr (assq (or context 'follow) value))))
           (if (memq method '(auto recent ask))
               method
             (if (functionp method) method 'auto)))

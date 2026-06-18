@@ -447,7 +447,66 @@ Exit code is non-zero when any test fails.
 
 ---
 
-## 9. References
+## 9. User Documentation Writing Conventions
+
+These conventions apply to all user-facing documentation: `README.org`,
+`docs/*.org` / `docs/*.md`, and any other documents read by users.
+
+### 9.1 Format
+
+- Use **Org mode** (`.org`) for primary documentation.  Markdown (`.md`)
+  may be used when required by a specific tool (e.g. GitHub rendering).
+- All `.org` files should start with proper Org metadata headers
+  (`#+title:`, `#+subtitle:`, `#+author:`, etc.).
+
+### 9.2 Emphasis Syntax
+
+Use correct Org mode emphasis markers — never Markdown-style `**`:
+
+| Purpose        | Correct    | Incorrect |
+|----------------|------------|-----------|
+| Bold           | `*bold*`   | `**bold**` |
+| Italic         | `/italic/` | `*italic*` |
+| Verbatim (code)| `=code=`   | `` `code` `` |
+| Code (mono)    | `~code~`   | `` `code` `` |
+
+Note: In Org mode, `**` at the start of a line denotes a level-2
+heading (`** Heading`).  Using `**` for emphasis is a Markdown
+convention and does not render correctly in Org.
+
+### 9.3 Line Length
+
+- Wrap at 80–90 columns.  This matches Emacs editing conventions
+  and ensures readability in terminal-width contexts.
+
+### 9.4 Character Encoding
+
+- Follow the same rule as section 1.7: prefer ASCII equivalents.
+  Avoid non-ASCII characters (e.g., →, ←, ⇒, •, ✓, —) unless
+  technically necessary.
+
+### 9.5 Code and Examples
+
+- **Inline code**: Use `=code=` for literal values, `~code~` for
+  monospaced references (variable names, commands, file paths).
+- **Code blocks**: Use `#+begin_src LANGUAGE` / `#+end_src` with a
+  language specifier (e.g. `emacs-lisp`, `sh`).
+- **Example output**: Use `#+begin_example` / `#+end_example`.
+- Keep examples concise and self-contained.
+
+### 9.6 Style
+
+- Write in **active voice** where possible.
+- Address the reader directly ("you can", "to use the package...").
+- Keep explanations concise; avoid marketing language.
+- Use consistent terminology throughout.
+- Prefer short paragraphs (3–5 sentences) over long blocks of text.
+- When listing options or rules, use bullet lists or numbered lists
+  for clarity.
+
+---
+
+## 10. References
 
 - [Org Mode Manual: Adding Hyperlink Types](https://orgmode.org/manual/Adding-Hyperlink-Types.html)
 - [GNU Emacs Manual: locate.el](https://www.gnu.org/software/emacs/manual/html_node/emacs/Dired-and-Find.html)

@@ -610,6 +610,286 @@ the resolved path."
     (should (equal (org-locate-file--follow-impl "emacsclient" 'emacs)
                    '(opened "/real/path/emacsclient" emacs)))))
 
+;;; org-locate-file-complete-link
+
+;; Tests for `org-locate-file-complete-link', which provides
+;; minibuffer completion backed by locate and returns a link string
+;; of the form TYPE:SUFFIX.  The suffix is the shortest unique
+;; suffix via `org-locate-file--shortest-unique-suffix'.
+
+;;;;; Unique basename returns lfile:BASENAME
+(ert-deftest org-locate-file-test/complete/unique-basename ()
+  "When completing-read returns a path whose basename is unique in
+the locate DB, the link uses just the basename."
+  (cl-letf (((symbol-function 'org-locate-file--run-locate)
+             (lambda (s)
+               (if (equal s "emacsclient")
+                   (list "/usr/bin/emacsclient")
+                 nil)))
+            ((symbol-function 'completing-read)
+             (lambda (&rest _) "/usr/bin/emacsclient")))
+    (should (equal (org-locate-file-complete-link nil)
+                   "lfile:emacsclient"))))
+
+;;;;; Disambiguation produces directory-qualified suffix
+(ert-deftest org-locate-file-test/complete/disambiguated-suffix ()
+  "When the basename alone would match multiple files, the link
+includes directory components for disambiguation."
+  (cl-letf (((symbol-function 'org-locate-file--run-locate)
+             (lambda (s)
+               (cond
+                ((equal s "emacsclient")
+                 (list "/usr/bin/emacsclient"
+                       "/usr/local/bin/emacsclient"))
+                ((equal s "bin/emacsclient")
+                 (list "/usr/bin/emacsclient"
+                       "/usr/local/bin/emacsclient"))
+                ((equal s "usr/bin/emacsclient")
+                 (list "/usr/bin/emacsclient"))
+                (t nil))))
+            ((symbol-function 'completing-read)
+             (lambda (&rest _) "/usr/bin/emacsclient")))
+    (should (equal (org-locate-file-complete-link nil)
+                   "lfile:usr/bin/emacsclient"))))
+
+;;;;; Empty choice returns type: prefix
+(ert-deftest org-locate-file-test/complete/empty-choice ()
+  "When completing-read returns an empty string, return just the
+type prefix with colon (e.g. `lfile:')."
+  (cl-letf (((symbol-function 'completing-read)
+             (lambda (&rest _) "")))
+    (should (equal (org-locate-file-complete-link nil) "lfile:"))))
+
+;;;;; Directory path with trailing slash is normalized
+(ert-deftest org-locate-file-test/complete/dir-trailing-slash ()
+  "A directory path ending in \"/\" (as coming from locate results)
+is normalized so the link uses the corrected basename."
+  (cl-letf (((symbol-function 'org-locate-file--run-locate)
+             (lambda (s)
+               (if (equal s "lib")
+                   (list "/home/user/project/src/lib")
+                 nil)))
+            ((symbol-function 'completing-read)
+             (lambda (&rest _) "/home/user/project/src/lib/")))
+    (should (equal (org-locate-file-complete-link nil)
+                   "lfile:lib"))))
+
+;;;;; File not in DB falls back to file-name-nondirectory
+(ert-deftest org-locate-file-test/complete/fallback-basename ()
+  "When `shortest-unique-suffix' returns nil (e.g. the file is in
+the locate output but not matched by member-check), fall back to
+`file-name-nondirectory'."
+  (cl-letf (((symbol-function 'org-locate-file--run-locate)
+             (lambda (_s)
+               ;; shortest-unique-suffix: member check fails
+               ;; because the real file is not in the results.
+               (list "/other/path/file.dat")))
+            ((symbol-function 'completing-read)
+             (lambda (&rest _) "/some/path/file.dat")))
+    (should (equal (org-locate-file-complete-link nil)
+                   "lfile:file.dat"))))
+
+;;; org-locate-file-store-link
+
+;; Tests for `org-locate-file-store-link', which captures the
+;; current buffer's file (or dired selection) and stores an lfile:
+;; link via `org-link-store-props'.  These tests mock the buffer
+;; environment and verify the stored properties.
+
+;;;;; Dired mode: unique basename stores lfile:BASENAME
+(ert-deftest org-locate-file-test/store/dired-unique-basename ()
+  "In Dired mode with a file that has a unique basename, store an
+lfile: link using just the basename."
+  (let* ((captured-props nil)
+         (org-locate-file-link-type "lfile"))
+    (cl-letf (((symbol-function 'derived-mode-p)
+               (lambda (mode) (eq mode 'dired-mode)))
+              ((symbol-function 'dired-get-filename)
+               (lambda (&rest _) "/usr/bin/emacsclient"))
+              ((symbol-function 'org-link-store-props)
+               (lambda (&rest props)
+                 (setq captured-props props)))
+              ((symbol-function 'org-locate-file--run-locate)
+               (lambda (s)
+                 (if (equal s "emacsclient")
+                     (list "/usr/bin/emacsclient")
+                   nil))))
+      (org-locate-file-store-link)
+      (should (consp captured-props))
+      (should (equal (plist-get captured-props :type) "lfile"))
+      (should (equal (plist-get captured-props :link)
+                     "lfile:emacsclient"))
+      (should (null (plist-get captured-props :description))))))
+
+;;;;; Dired mode: disambiguated suffix includes directory
+(ert-deftest org-locate-file-test/store/dired-disambiguated ()
+  "In Dired mode when the basename alone is ambiguous, store a
+link with directory components."
+  (let* ((captured-props nil)
+         (org-locate-file-link-type "lfile"))
+    (cl-letf (((symbol-function 'derived-mode-p)
+               (lambda (mode) (eq mode 'dired-mode)))
+              ((symbol-function 'dired-get-filename)
+               (lambda (&rest _) "/usr/bin/emacsclient"))
+              ((symbol-function 'org-link-store-props)
+               (lambda (&rest props)
+                 (setq captured-props props)))
+              ((symbol-function 'org-locate-file--run-locate)
+               (lambda (s)
+                 (cond
+                  ((equal s "emacsclient")
+                   (list "/usr/bin/emacsclient"
+                         "/usr/local/bin/emacsclient"))
+                  ((equal s "bin/emacsclient")
+                   (list "/usr/bin/emacsclient"
+                         "/usr/local/bin/emacsclient"))
+                  ((equal s "usr/bin/emacsclient")
+                   (list "/usr/bin/emacsclient"))
+                  (t nil)))))
+      (org-locate-file-store-link)
+      (should (equal (plist-get captured-props :link)
+                     "lfile:usr/bin/emacsclient")))))
+
+;;;;; Dired mode: directory path with trailing slash
+(ert-deftest org-locate-file-test/store/dired-directory ()
+  "In Dired mode with point on a directory, store an lfile: link
+using the normalized directory basename."
+  (let* ((captured-props nil)
+         (org-locate-file-link-type "lfile"))
+    (cl-letf (((symbol-function 'derived-mode-p)
+               (lambda (mode) (eq mode 'dired-mode)))
+              ((symbol-function 'dired-get-filename)
+               (lambda (&rest _) "/home/user/project/src/lib/"))
+              ((symbol-function 'org-link-store-props)
+               (lambda (&rest props)
+                 (setq captured-props props)))
+              ((symbol-function 'org-locate-file--run-locate)
+               (lambda (s)
+                 (if (equal s "lib")
+                     (list "/home/user/project/src/lib")
+                   nil))))
+      (org-locate-file-store-link)
+      (should (equal (plist-get captured-props :link)
+                     "lfile:lib")))))
+
+;;;;; Dired mode: suffix nil returns nil, no props stored
+(ert-deftest org-locate-file-test/store/dired-suffix-nil ()
+  "In Dired mode when `shortest-unique-suffix' returns nil, no
+link properties are stored and the function returns nil."
+  (let* ((captured-props nil)
+         (result nil)
+         (org-locate-file-link-type "lfile"))
+    (cl-letf (((symbol-function 'derived-mode-p)
+               (lambda (mode) (eq mode 'dired-mode)))
+              ((symbol-function 'dired-get-filename)
+               (lambda (&rest _) "/usr/bin/emacsclient"))
+              ((symbol-function 'org-link-store-props)
+               (lambda (&rest props)
+                 (setq captured-props props)))
+              ((symbol-function 'org-locate-file--run-locate)
+               (lambda (s)
+                 (if (equal s "emacsclient")
+                     (list "/other/bin/emacsclient")
+                   nil))))
+      (setq result (org-locate-file-store-link))
+      (should (null captured-props))
+      (should (null result)))))
+
+;;;;; File-visiting buffer: stores link with description
+(ert-deftest org-locate-file-test/store/file-visiting-buffer ()
+  "In a file-visiting buffer, store an lfile: link using the
+shortest unique suffix and the description from
+`org-link--file-link-to-here'."
+  (let* ((captured-props nil)
+         (org-locate-file-link-type "lfile"))
+    (cl-letf (((symbol-function 'derived-mode-p)
+               (lambda (_mode) nil))
+              ((symbol-function 'buffer-base-buffer)
+               (lambda () nil))
+              ((symbol-function 'org-link--file-link-to-here)
+               (lambda ()
+                 (cons "file:/usr/bin/emacsclient" "Emacs client")))
+              ((symbol-function 'org-link-store-props)
+               (lambda (&rest props)
+                 (setq captured-props props)))
+              ((symbol-function 'org-locate-file--run-locate)
+               (lambda (s)
+                 (if (equal s "emacsclient")
+                     (list "/usr/bin/emacsclient")
+                   nil))))
+      (let ((buffer-file-name "/usr/bin/emacsclient"))
+        (org-locate-file-store-link))
+      (should (equal (plist-get captured-props :type) "lfile"))
+      (should (equal (plist-get captured-props :link)
+                     "lfile:emacsclient"))
+      (should (equal (plist-get captured-props :description)
+                     "Emacs client")))))
+
+;;;;; File-visiting buffer: preserves search option (::linenum)
+(ert-deftest org-locate-file-test/store/file-with-search-option ()
+  "In a file-visiting buffer with a search option (line number),
+the link preserves the ::option suffix."
+  (let* ((captured-props nil)
+         (org-locate-file-link-type "lfile"))
+    (cl-letf (((symbol-function 'derived-mode-p)
+               (lambda (_mode) nil))
+              ((symbol-function 'buffer-base-buffer)
+               (lambda () nil))
+              ((symbol-function 'org-link--file-link-to-here)
+               (lambda ()
+                 (cons "file:/usr/bin/emacsclient::42" nil)))
+              ((symbol-function 'org-link-store-props)
+               (lambda (&rest props)
+                 (setq captured-props props)))
+              ((symbol-function 'org-locate-file--run-locate)
+               (lambda (s)
+                 (if (equal s "emacsclient")
+                     (list "/usr/bin/emacsclient")
+                   nil))))
+      (let ((buffer-file-name "/usr/bin/emacsclient"))
+        (org-locate-file-store-link))
+      (should (equal (plist-get captured-props :link)
+                     "lfile:emacsclient::42")))))
+
+;;;;; File-visiting buffer: suffix nil returns nil
+(ert-deftest org-locate-file-test/store/file-suffix-nil ()
+  "In a file-visiting buffer when `shortest-unique-suffix' returns
+nil, no link properties are stored."
+  (let* ((captured-props nil)
+         (result nil)
+         (org-locate-file-link-type "lfile"))
+    (cl-letf (((symbol-function 'derived-mode-p)
+               (lambda (_mode) nil))
+              ((symbol-function 'buffer-base-buffer)
+               (lambda () nil))
+              ((symbol-function 'org-link--file-link-to-here)
+               (lambda ()
+                 (cons "file:/usr/bin/emacsclient" nil)))
+              ((symbol-function 'org-link-store-props)
+               (lambda (&rest props)
+                 (setq captured-props props)))
+              ((symbol-function 'org-locate-file--run-locate)
+               (lambda (_s)
+                 (user-error "Not in DB"))))
+      (let ((buffer-file-name "/usr/bin/emacsclient"))
+        (setq result (org-locate-file-store-link)))
+      (should (null captured-props))
+      (should (null result)))))
+
+;;;;; store-link-p nil: returns nil, no props stored
+(ert-deftest org-locate-file-test/store/disabled-flag ()
+  "When `org-locate-file-store-link-p' is nil, the store handler
+returns nil without storing any properties."
+  (let* ((captured-props nil)
+         (result nil)
+         (org-locate-file-store-link-p nil))
+    (cl-letf (((symbol-function 'org-link-store-props)
+               (lambda (&rest props)
+                 (setq captured-props props))))
+      (setq result (org-locate-file-store-link))
+      (should (null captured-props))
+      (should (null result)))))
+
 (provide 'ol-locate-file-unit-test)
 
 ;;; ol-locate-file-unit-test.el ends here

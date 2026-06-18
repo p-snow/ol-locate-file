@@ -162,7 +162,12 @@ argument.  It may return:
 - A list of strings (COMMAND ARGS...), the same convention as
   `locate-make-command-line', or
 - A string, which is split into command and arguments via
-  `split-string-and-unquote'."
+  `split-string-and-unquote'.
+
+IMPORTANT: The command must output absolute paths (one per line),
+the same convention as the standard `locate' command.  Commands
+like `fd' that output relative paths by default must be passed an
+`--absolute-path' (or equivalent) flag."
   :type '(choice (const :tag "Default (locate-make-command-line)" nil)
                  (string :tag "Command prefix string")
                  (repeat :tag "Command argument list" string)

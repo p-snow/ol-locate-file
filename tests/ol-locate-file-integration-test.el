@@ -675,6 +675,193 @@ large DB completes within 10 seconds."
          (should (stringp (car result)))
          (should (< (- (float-time) start-time) 10.0)))))))
 
+;;; Store-follow round-trip (integration)
+
+;; These tests verify the full round-trip: store an lfile link via
+;; `org-locate-file-store-link' (from a file-visiting buffer), then
+;; follow it via `org-locate-file--follow', checking that the
+;; resolved path matches the original file.
+
+;;;; Normal cases - unique basename
+
+;;;;; Store then follow resolves to original file
+(ert-deftest org-locate-file-test/integration/store-follow/unique-basename ()
+  "Store an lfile link for `guide.txt' (unique basename in doc/),
+then follow it and verify the resolved path correctly points to
+a file ending in `guide.txt'."
+  (org-locate-file-test--skip-unless-db)
+  (org-locate-file-test--skip-unless-dir)
+  (org-locate-file-test--with-test-db
+   (lambda ()
+     (let* ((test-file (expand-file-name "doc/guide.txt"
+                                         org-locate-file-test--dir-path))
+            (captured-link nil))
+       (with-current-buffer (find-file-noselect test-file)
+         (cl-letf (((symbol-function 'org-link--file-link-to-here)
+                    (lambda () (cons (concat "file:" test-file) nil)))
+                   ((symbol-function 'org-link-store-props)
+                    (lambda (&rest props)
+                      (setq captured-link (plist-get props :link)))))
+           (org-locate-file-store-link))
+         (kill-buffer (current-buffer)))
+       (should (stringp captured-link))
+       (should (string-prefix-p "lfile:" captured-link))
+       (let ((suffix (substring captured-link (length "lfile:"))))
+         (should (> (length suffix) 0))
+         (let ((result (org-locate-file-test--follow-captured suffix nil)))
+           (should (string-suffix-p "guide.txt" (car result)))
+           (should (file-name-absolute-p (car result)))))))))
+
+;;;;; Store then follow resolves with disambiguated suffix
+(ert-deftest org-locate-file-test/integration/store-follow/disambiguated-suffix ()
+  "Store an lfile link for `collision/report.txt' (basename shared
+with other/report.txt), then follow it and verify the resolved
+path ends with `collision/report.txt'."
+  (org-locate-file-test--skip-unless-db)
+  (org-locate-file-test--skip-unless-dir)
+  (org-locate-file-test--with-test-db
+   (lambda ()
+     (let* ((test-file (expand-file-name "collision/report.txt"
+                                         org-locate-file-test--dir-path))
+            (captured-link nil))
+       (with-current-buffer (find-file-noselect test-file)
+         (cl-letf (((symbol-function 'org-link--file-link-to-here)
+                    (lambda () (cons (concat "file:" test-file) nil)))
+                   ((symbol-function 'org-link-store-props)
+                    (lambda (&rest props)
+                      (setq captured-link (plist-get props :link)))))
+           (org-locate-file-store-link))
+         (kill-buffer (current-buffer)))
+       (should (stringp captured-link))
+       (should (string-prefix-p "lfile:" captured-link))
+       (let ((suffix (substring captured-link (length "lfile:"))))
+         (should (string-match-p "collision/report\\.txt\\'" suffix))
+         (let ((result (org-locate-file-test--follow-captured suffix nil)))
+           (should (string-suffix-p "collision/report.txt" (car result)))
+           (should (file-name-absolute-p (car result)))))))))
+
+;;; Complete-follow round-trip (integration)
+
+;; These tests verify the full round-trip: complete an lfile link
+;; via `org-locate-file-complete-link' (mocking completing-read),
+;; then follow it via `org-locate-file--follow'.
+
+;;;; Normal cases
+
+;;;;; Complete then follow resolves to original file (unique)
+(ert-deftest org-locate-file-test/integration/complete-follow/unique-basename ()
+  "Complete a link by selecting `guide.txt' (unique), then follow
+and verify it resolves to a path ending in `guide.txt'."
+  (org-locate-file-test--skip-unless-db)
+  (org-locate-file-test--skip-unless-dir)
+  (org-locate-file-test--with-test-db
+   (lambda ()
+     (let* ((test-file (expand-file-name "doc/guide.txt"
+                                         org-locate-file-test--dir-path))
+            (link-string
+             (cl-letf (((symbol-function 'completing-read)
+                        (lambda (&rest _) test-file)))
+               (org-locate-file-complete-link nil))))
+       (should (stringp link-string))
+       (should (string-prefix-p "lfile:" link-string))
+       (let ((suffix (substring link-string (length "lfile:"))))
+         (should (string-match-p "\\`guide\\.txt\\'" suffix))
+         (let ((result (org-locate-file-test--follow-captured suffix nil)))
+           (should (string-suffix-p "guide.txt" (car result)))
+           (should (file-name-absolute-p (car result)))))))))
+
+;;;;; Complete then follow resolves with disambiguated suffix
+(ert-deftest org-locate-file-test/integration/complete-follow/disambiguated-suffix ()
+  "Complete a link by selecting `collision/report.txt', then
+follow and verify it resolves to a path ending in
+`collision/report.txt'."
+  (org-locate-file-test--skip-unless-db)
+  (org-locate-file-test--skip-unless-dir)
+  (org-locate-file-test--with-test-db
+   (lambda ()
+     (let* ((test-file (expand-file-name "collision/report.txt"
+                                         org-locate-file-test--dir-path))
+            (link-string
+             (cl-letf (((symbol-function 'completing-read)
+                        (lambda (&rest _) test-file)))
+               (org-locate-file-complete-link nil))))
+       (should (stringp link-string))
+       (should (string-prefix-p "lfile:" link-string))
+       (let ((suffix (substring link-string (length "lfile:"))))
+         (should (string-match-p "collision/report\\.txt\\'" suffix))
+         (let ((result (org-locate-file-test--follow-captured suffix nil)))
+           (should (string-suffix-p "collision/report.txt" (car result)))
+           (should (file-name-absolute-p (car result)))))))))
+
+;;; Move-follow scenario (integration)
+
+;; These tests verify what happens when a file is moved after a
+;; link is stored, the locate database is rebuilt, and the link is
+;; then followed.  The link should resolve to the new location
+;; because the stored suffix (basename) still matches via locate
+;; and the suffix-p filter.
+
+;;;; Normal cases
+
+;;;;; File moved within test dir resolves to new location
+(ert-deftest org-locate-file-test/integration/move-follow/unique-file-moved ()
+  "Store a link for `guide.txt', move it to `moved/guide.txt',
+rebuild the locate DB, then follow the link and verify it resolves
+to the new location.  The suffix `guide.txt' remains valid because
+the basename is unchanged.
+
+After the test, restore the original file and DB to avoid
+affecting subsequent tests."
+  (org-locate-file-test--skip-unless-db)
+  (org-locate-file-test--skip-unless-dir)
+  (org-locate-file-test--with-test-db
+   (lambda ()
+     (let* ((dir org-locate-file-test--dir-path)
+            (db org-locate-file-test--db-path)
+            (old-path (expand-file-name "doc/guide.txt" dir))
+            (new-dir (expand-file-name "moved" dir))
+            (new-path (expand-file-name "guide.txt" new-dir))
+            (captured-link nil))
+       (unwind-protect
+           (progn
+             ;; Store a link to the original file
+             (with-current-buffer (find-file-noselect old-path)
+               (cl-letf (((symbol-function 'org-link--file-link-to-here)
+                          (lambda ()
+                            (cons (concat "file:" old-path) nil)))
+                         ((symbol-function 'org-link-store-props)
+                          (lambda (&rest props)
+                            (setq captured-link (plist-get props :link)))))
+                 (org-locate-file-store-link))
+               (kill-buffer (current-buffer)))
+             (should (stringp captured-link))
+             (should (string-prefix-p "lfile:" captured-link))
+             ;; Move the file within the test directory
+             (make-directory new-dir t)
+             (rename-file old-path new-path)
+             (should (file-exists-p new-path))
+             (should (not (file-exists-p old-path)))
+             ;; Rebuild the locate database
+             (let ((exit-code (call-process "updatedb" nil nil nil
+                                            "-l" "0"
+                                            "-o" db
+                                            "-U" dir)))
+               (should (zerop exit-code)))
+             ;; Follow the stored link -- should resolve to the new location
+             (let* ((suffix (substring captured-link (length "lfile:")))
+                    (result (org-locate-file-test--follow-captured
+                             suffix nil)))
+               (should (string-suffix-p "guide.txt" (car result)))
+               (should (file-name-absolute-p (car result)))
+               ;; The resolved path should be the NEW location, not the old one
+               (should (string-prefix-p (file-name-as-directory new-dir)
+                                        (car result)))))
+         ;; Cleanup: restore original state
+         (rename-file new-path old-path t)
+         (ignore-errors (delete-directory new-dir))
+         (call-process "updatedb" nil nil nil
+                       "-l" "0" "-o" db "-U" dir))))))
+
 (provide 'ol-locate-file-integration-test)
 
 ;;; ol-locate-file-integration-test.el ends here

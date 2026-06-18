@@ -450,14 +450,61 @@ is enough to disambiguate via locate, return that two-component suffix."
 ;;;;; Unique suffix after multiple directory levels
 (ert-deftest org-locate-file-test/shortest-unique-suffix/multi-dir-level ()
   "When one directory level is insufficient, keep prepending until
-the suffix is unique."
+the suffix is unique via locate."
   (cl-letf (((symbol-function 'org-locate-file--run-locate)
-             (lambda (_s)
-               (list "/home/user/proj/src/main.el"
-                     "/home/user/other/src/main.el"))))
+             (lambda (s)
+               (cond
+                ((equal s "main.el")
+                 (list "/home/user/proj/src/main.el"
+                       "/home/user/other/src/main.el"))
+                ((equal s "src/main.el")
+                 (list "/home/user/proj/src/main.el"
+                       "/home/user/other/src/main.el"))
+                ((equal s "proj/src/main.el")
+                 (list "/home/user/proj/src/main.el"))
+                (t nil)))))
     (should (equal (org-locate-file--shortest-unique-suffix
                     "/home/user/proj/src/main.el")
                    "proj/src/main.el"))))
+
+;;;;; Unique suffix disambiguates same-directory files by extension
+(ert-deftest org-locate-file-test/shortest-unique-suffix/same-dir-ext ()
+  "When two files with the same basename stem exist in the same
+directory (e.g. foo.el and foo.elc), `string-suffix-p' filtering
+disambiguates by the full basename including extension, so the
+basename alone suffices."
+  (cl-letf (((symbol-function 'org-locate-file--run-locate)
+             (lambda (s)
+               (cond
+                ((equal s "foo.el")
+                 (list "/home/user/project/src/foo.el"
+                       "/home/user/project/src/foo.elc"))
+                (t nil)))))
+    (should (equal (org-locate-file--shortest-unique-suffix
+                    "/home/user/project/src/foo.el")
+                   "foo.el"))))
+
+;;;;; Extension filtering then directory prepending as needed
+(ert-deftest org-locate-file-test/shortest-unique-suffix/ext-then-dir ()
+  "When extension filtering alone is insufficient (same-named files
+in different directories), directory prepending further
+disambiguates."
+  (cl-letf (((symbol-function 'org-locate-file--run-locate)
+             (lambda (s)
+               (cond
+                ((equal s "foo.el")
+                 (list "/home/user/proj/src/foo.el"
+                       "/home/user/proj/src/foo.elc"
+                       "/home/user/other/src/foo.el"))
+                ((equal s "src/foo.el")
+                 (list "/home/user/proj/src/foo.el"
+                       "/home/user/other/src/foo.el"))
+                ((equal s "proj/src/foo.el")
+                 (list "/home/user/proj/src/foo.el"))
+                (t nil)))))
+    (should (equal (org-locate-file--shortest-unique-suffix
+                    "/home/user/proj/src/foo.el")
+                   "proj/src/foo.el"))))
 
 ;;;;; File not found in results returns nil
 (ert-deftest org-locate-file-test/shortest-unique-suffix/not-in-results ()

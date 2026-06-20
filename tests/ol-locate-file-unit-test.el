@@ -368,7 +368,51 @@ a substring (e.g. \"packages\" matching \"packages/child\" or
     (should (equal (org-locate-file--resolve "packages")
                    "/home/user/proj/packages"))))
 
-;;;;; Empty filtered list falls back to raw candidates
+;;;;; Single candidate with spaces returns correctly
+(ert-deftest org-locate-file-test/resolve/single-candidate-spaces ()
+  "When a single candidate contains spaces in the path, return it
+directly."
+  (cl-letf (((symbol-function 'org-locate-file--run-locate)
+             (lambda (_s) (list "/home/user/my documents/report.txt"))))
+    (let ((org-locate-file-resolve-method 'auto))
+      (should (equal (org-locate-file--resolve "report.txt" 'follow)
+                     "/home/user/my documents/report.txt")))))
+
+;;;; Multiple candidates with spaces filtered by suffix
+(ert-deftest org-locate-file-test/resolve/multi-candidate-spaces ()
+  "When candidates contain spaces and multiple match,
+`string-suffix-p' filtering works correctly with spaces in paths."
+  (cl-letf (((symbol-function 'org-locate-file--run-locate)
+             (lambda (_s)
+               (list "/home/user/my documents/report.txt"
+                     "/home/user/other docs/report.txt"))))
+    (let ((org-locate-file-resolve-method 'auto))
+      (should (equal (org-locate-file--resolve "report.txt" 'follow)
+                     "/home/user/my documents/report.txt")))))
+
+;;;; Substring filtering with spaces
+(ert-deftest org-locate-file-test/resolve/substring-spaces ()
+  "When locate returns paths with spaces where SEARCH-STRING appears
+as a substring, `string-suffix-p' correctly filters them out."
+  (cl-letf (((symbol-function 'org-locate-file--run-locate)
+             (lambda (_s)
+               (list "/home/user/my documents"
+                     "/home/user/my documents/sub file.txt"))))
+    (should (equal (org-locate-file--resolve "my documents")
+                   "/home/user/my documents"))))
+
+;;;; Empty filtered list with spaces falls back to raw candidates
+(ert-deftest org-locate-file-test/resolve/empty-filter-spaces ()
+  "When no candidate with spaces ends with SEARCH-STRING, the raw
+locate results are used as fallback."
+  (cl-letf (((symbol-function 'org-locate-file--run-locate)
+             (lambda (_s)
+               (list "/path/to/foo space.elc" "/other/bar space.elc"))))
+    (let ((org-locate-file-resolve-method 'auto))
+      (should (equal (org-locate-file--resolve "space.elc")
+                     "/path/to/foo space.elc")))))
+
+;;;; Empty filtered list falls back to raw candidates
 (ert-deftest org-locate-file-test/resolve/empty-filter-fallback ()
   "When no candidate ends with SEARCH-STRING, the raw locate
 results are used as fallback."

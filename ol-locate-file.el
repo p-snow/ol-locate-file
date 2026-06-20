@@ -7,7 +7,7 @@
 ;; Keywords: hypermedia, convenience
 ;; URL: https://github.com/p-snow/ol-locate-file
 ;; Package-Requires: ((emacs "30.1") (org "9.3"))
-;; Version: 0.1.0
+;; Version: 0.1.1
 
 ;; This file is NOT part of GNU Emacs.
 

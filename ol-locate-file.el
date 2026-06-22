@@ -1,6 +1,6 @@
 ;;; ol-locate-file.el --- Locate-based file links for Org mode -*- lexical-binding: t -*-
 
-;; Copyright (C) 2026  Free Software Foundation, Inc.
+;; Copyright (C) 2026 p-snow
 
 ;; Author: p-snow <public@p-snow.org>
 ;; Assisted-by: DeepSeek V4 Pro

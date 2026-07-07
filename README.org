@@ -50,16 +50,13 @@ The link type prefix (default ~"lfile"~) is customizable via
   like =find= via ~org-locate-file-locate-args~ — see below for
   examples.
 
-** Using =use-package= with =:vc=
+** Automated instlattion
 
-This package is not yet available on any package archive (MELPA
-submission is planned for the future).  In the meantime, install
-directly from the repository using =:vc=:
+This package is available on MELPA. You can install it via Emacs' `package.el` after running `M-x package-refresh-contents`, or define the package using the `use-package` macro.
 
 #+begin_src emacs-lisp
 (use-package ol-locate-file
-  :vc ( :url "https://github.com/p-snow/ol-locate-file"
-        :rev :newest))
+  :ensure t)
 #+end_src
 
 ** Manual installation

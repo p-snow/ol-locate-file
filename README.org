@@ -4,22 +4,24 @@
 #+email: public (at) p-snow.org
 #+language: en
 
+#+HTML: <a href="https://melpa.org/#/ol-locate-file"><img src="https://melpa.org/packages/ol-locate-file-badge.svg"></a> <a href="https://stable.melpa.org/#/ol-locate-file"><img src="https://stable.melpa.org/packages/ol-locate-file-badge.svg"></a>
+
+Locate-based Org file link with which users can abbreviate file paths.
+
 * Introduction
 
-~ol-locate-file~ provides a new Org link type that resolves partial file
-path substrings into full absolute paths using the =locate= command (or a
-compatible alternative like =plocate=).
+~ol-locate-file~ provides a new Org link type that resolves partial file path substrings into full absolute paths using the =locate= command (or an alternative like =plocate=, =find=, or =fd=).
 
 Instead of writing a full absolute path:
 
 #+begin_example
-  [[file:/usr/bin/emacsclient][emacsclient]]
+[[lfile:~/data/my-documents/journals/20260707_journal.txt][Daily Journal on 2026-07-07]]
 #+end_example
 
 you can write just a distinctive substring:
 
 #+begin_example
-  [[lfile:emacsclient][emacsclient]]
+[[lfile:20260707_journal.txt][Daily Journal on 2026-07-07]]
 #+end_example
 
 The link resolves at follow-time via the locate database, so it works

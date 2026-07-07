@@ -100,8 +100,8 @@ When you invoke ~org-store-link~ in a file-visiting buffer or
 Dired, the handler stores an =lfile:= link using the *shortest unique
 path suffix*.  For example:
 
-- ~lfile:emacsclient~ (when the basename is unique in the locate db)
-- ~lfile:bin/emacsclient~ (when multiple files share the basename)
+- ~lfile:20260707_journal.txt~ (when the basename is unique in the locate db)
+- ~lfile:journals/20260707_journal.txt~ (when multiple files share the basename)
 
 Stored links may include search option suffixes such as ~::10~ (line
 number) or ~::#heading~ (Org heading), obtained from
@@ -115,7 +115,7 @@ You can disable lfile: link storage entirely by setting
 When inserting a link via ~org-insert-link~ (~C-c C-l~) and selecting
 the =lfile:= type, the package queries the locate database dynamically
 as you type.  Completion candidates are basenames of matching files, and
-the inserted link uses just the basename (e.g. ~lfile:emacsclient~).
+the inserted link uses just the basename (e.g. ~lfile:20260707_journal.txt~).
 
 If no locate results match, your raw input is used as-is, allowing you
 to type a path that is not in the locate database.
@@ -175,7 +175,7 @@ Controls how the locate command line is built:
 
 For example, to use =find= instead of =locate= on systems without a
 locate database.  Note the use of =-path= (not =-name=) so that
-patterns containing partial path components (e.g. ~bin/emacsclient~)
+patterns containing partial path components (e.g. ~journals/20260707_journal.txt~)
 match correctly:
 
 #+begin_example
@@ -256,11 +256,11 @@ contracts that the package depends on:
 - ~--regex~: Enables regex matching instead of substring matching.
   The store handler's shortest-unique-suffix logic and the follow
   handler's suffix-p filtering assume substring semantics.  With
-  ~--regex~, a search string like ~bin/emacsclient~ may match in
+  ~--regex~, a search string like ~journals/20260707_journal.txt~ may match in
   unexpected ways or not at all.
 
 - ~--basename~ (or equivalent): Matches only the filename, not the
-  full path.  This breaks path-component search (e.g. ~bin/emacsclient~)
+  full path.  This breaks path-component search (e.g. ~journals/20260707_journal.txt~)
   and the shortest-unique-suffix algorithm, which relies on full-path
   matching to disambiguate.
 
@@ -295,7 +295,7 @@ the full path) with glob wildcards:
 *** Rules for find
 
 1. Use =-path=, not =-name=: =-name= matches only the basename.
-   A search string like ~bin/emacsclient~ would never match because it
+   A search string like ~journals/20260707_journal.txt~ would never match because it
    contains a directory separator.
 
 2. Always specify ="/"= as the search root (or a directory
@@ -418,7 +418,7 @@ constitute a compatibility guarantee.
 =lfile:= links support Org's search option syntax.  For example:
 
 #+begin_example
-  [[lfile:emacsclient::10]]
+  [[lfile:20260707_journal.txt::10]]
   [[lfile:foo.el::#some-function]]
   [[lfile:project.org::*Introduction]]
 #+end_example
